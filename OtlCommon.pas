@@ -3,7 +3,7 @@
 ///<license>
 ///This software is distributed under the BSD license.
 ///
-///Copyright (c) 2015, Primoz Gabrijelcic
+///Copyright (c) 2016, Primoz Gabrijelcic
 ///All rights reserved.
 ///
 ///Redistribution and use in source and binary forms, with or without modification,
@@ -35,10 +35,14 @@
 ///     Blog            : http://thedelphigeek.com
 ///   Contributors      : GJ, Lee_Nover, scarre, Sean B. Durkin
 ///   Creation date     : 2008-06-12
-///   Last modification : 2015-10-03
-///   Version           : 1.39
+///   Last modification : 2016-06-23
+///   Version           : 1.40
 ///</para><para>
 ///   History:
+///     1.40: 2016-06-23
+///       - Implemented Environment.ProcessorGroups and Environment.NUMANodes (Win64 only).
+///       - IOmniAffinity.Mask changed from DWORD to NativeUInt to properly support
+///         up to 64 processors on Win64.
 ///     1.39: 2015-10-03
 ///       - [Sean] Implemented TOmniAlignedInt32 (clone of GpStuff.TGp4AlignedInt)
 ///         and TOmniAlignedInt64 (clone of GpStuff.TGp8AlignedInt64).
@@ -243,6 +247,7 @@ uses
   RTTI,
 {$ENDIF OTL_ERTTI}
 {$IFDEF OTL_Generics}
+  Generics.Defaults,
   Generics.Collections,
 {$ENDIF OTL_Generics}
   SysUtils;
@@ -671,15 +676,15 @@ type
     procedure SetAsString(const value: string);
     procedure SetCount(const value: integer);
   {$IFDEF MSWINDOWS}
-    function  GetMask: DWORD;
-    procedure SetMask(const value: DWORD);
+    function GetMask: NativeUInt;
+    procedure SetMask(const value: NativeUInt);
   {$ENDIF}
   //
     property AsString: string read GetAsString write SetAsString;
     property Count: integer read GetCount write SetCount;
     property CountPhysical: integer read GetCountPhysical;
   {$IFDEF MSWINDOWS}
-    property Mask: DWORD read GetMask write SetMask;
+    property Mask: NativeUInt read GetMask write SetMask;
   {$ENDIF}
   end; { IOmniAffinity }
 
@@ -732,11 +737,39 @@ type
     property ID: TThreadId read GetID;
   end; { IOmniThreadEnvironment }
 
+  {$IFDEF Win64}
+  IOmniNUMANode = interface ['{8D3B415F-8B13-4BFF-B7C7-2D0BC1705217}']
+    function GetAffinity: NativeUInt;
+    function GetGroupNumber: integer;
+    function GetNodeNumber: integer;
+  //
+    property NodeNumber: integer read GetNodeNumber;
+    property GroupNumber: integer read GetGroupNumber;
+    property Affinity: NativeUInt read GetAffinity;
+  end; { IOmniNUMANode }
+
+  IOmniProcessorGroup = interface ['{BCFB0AE8-A378-4A4B-AD73-EF9B59218B55}']
+    function GetAffinity: NativeUInt;
+    function GetGroupNumber: integer;
+    //
+    property GroupNumber: integer read GetGroupNumber;
+    property Affinity: NativeUInt read GetAffinity;
+  end; { IOmniProcessorGroup }
+  {$ENDIF Win64}
+
   IOmniEnvironment = interface ['{4F9594E2-8B88-483C-9616-85B50493406D}']
+  {$IFDEF Win64}
+    function  GetNUMANodes: TList<IOmniNUMANode>;
+    function  GetProcessorGroups: TList<IOmniProcessorGroup>;
+  {$ENDIF}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
     function  GetThread: IOmniThreadEnvironment;
   //
+  {$IFDEF Win64}
+    property NUMANodes: TList<IOmniNUMANode> read GetNUMANodes;
+    property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
+  {$ENDIF}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
     property Thread: IOmniThreadEnvironment read GetThread;
@@ -1083,15 +1116,15 @@ type
     procedure SetAsString(const value: string);
     procedure SetCount(const value: integer);
   {$IFDEF MSWINDOWS}
-    function  GetMask: DWORD;
-    procedure SetMask(const value: DWORD);
+    function  GetMask: NativeUInt;
+    procedure SetMask(const value: NativeUInt);
   {$ENDIF}
   public
     constructor Create(target: TOmniAffinityTarget);
     property AsString: string read GetAsString write SetAsString;
     property Count: integer read GetCount write SetCount;
   {$IFDEF MSWINDOWS}
-    property Mask: DWORD read GetMask write SetMask;
+    property Mask: NativeUInt read GetMask write SetMask;
   {$ENDIF}
   end; { TOmniAffinity }
 
@@ -1138,17 +1171,65 @@ type
     property ID: TThreadID read GetID;
   end; { TOmniThreadEnvironment }
 
+  {$IFDEF Win64}
+  TOmniNUMANode = class(TInterfacedObject, IOmniNUMANode)
+  private
+    FAffinity   : NativeUInt;
+    FGroupNumber: integer;
+    FNodeNumber : integer;
+  protected
+    function GetAffinity: NativeUInt;
+    function GetGroupNumber: integer;
+    function GetNodeNumber: integer;
+  public
+    constructor Create(nodeNumber, groupNumber: integer; affinity: NativeUInt);
+    property Affinity: NativeUInt read GetAffinity;
+    property GroupNumber: integer read GetGroupNumber;
+    property NodeNumber: integer read GetNodeNumber;
+  end; { TOmniNUMANode }
+
+  TOmniProcessorGroup = class(TInterfacedObject, IOmniProcessorGroup)
+  private
+    FAffinity   : NativeUInt;
+    FGroupNumber: integer;
+  protected
+    function GetAffinity: NativeUInt;
+    function GetGroupNumber: integer;
+  public
+    constructor Create(groupNumber: integer; affinity: NativeUInt);
+    property Affinity: NativeUInt read GetAffinity;
+    property GroupNumber: integer read GetGroupNumber;
+  end; { TOmniProcessorGroup }
+  {$ENDIF Win64}
+
   TOmniEnvironment = class(TInterfacedObject, IOmniEnvironment)
   strict private
+  {$IFDEF Win64}
+    oeNUMANodes      : TList<IOmniNUMANode>;
+    oeProcessorGroups: TList<IOmniProcessorGroup>;
+  {$ENDIF}
     oeProcessEnv: IOmniProcessEnvironment;
     oeSystemEnv : IOmniSystemEnvironment;
     oeThreadEnv : IOmniThreadEnvironment;
+  {$IFDEF Win64}
+  strict protected
+    procedure LoadNUMAInfo;
+  {$ENDIF}
   protected
+  {$IFDEF Win64}
+    function  GetNUMANodes: TList<IOmniNUMANode>;
+    function  GetProcessorGroups: TList<IOmniProcessorGroup>;
+  {$ENDIF}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
     function  GetThread: IOmniThreadEnvironment;
   public
     constructor Create;
+  {$IFDEF Win64}
+    destructor  Destroy; override;
+    property NUMANodes: TList<IOmniNUMANode> read GetNUMANodes;
+    property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
+  {$ENDIF}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
     property Thread: IOmniThreadEnvironment read GetThread;
@@ -3436,7 +3517,7 @@ end;
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
-function TOmniAffinity.GetMask: DWORD;
+function TOmniAffinity.GetMask: NativeUInt;
 begin
   case oaTarget of
     atSystem:
@@ -3489,7 +3570,7 @@ begin
 end; { TOmniAffinity.SetCount }
 
 {$IFDEF MSWINDOWS}
-procedure TOmniAffinity.SetMask(const value: DWORD);
+procedure TOmniAffinity.SetMask(const value: NativeUInt);
 begin
   AsString := DSiAffinityMaskToString(value);
 end; { TOmniAffinity.SetMask }
@@ -3579,6 +3660,54 @@ begin
   Result := oteThreadID;
 end; { TOmniThreadEnvironment.GetID }
 
+{$IFDEF Win64}
+
+{ TOmniNUMANode }
+
+constructor TOmniNUMANode.Create(nodeNumber, groupNumber: integer; affinity: NativeUInt);
+begin
+  inherited Create;
+  FAffinity := affinity;
+  FGroupNumber := groupNumber;
+  FNodeNumber := nodeNumber;
+end; { TOmniNUMANode.Create }
+
+function TOmniNUMANode.GetAffinity: NativeUInt;
+begin
+  Result := FAffinity;
+end; { TOmniNUMANode.GetAffinity }
+
+function TOmniNUMANode.GetGroupNumber: integer;
+begin
+  Result := FGroupNumber;
+end; { TOmniNUMANode.GetGroupNumber }
+
+function TOmniNUMANode.GetNodeNumber: integer;
+begin
+  Result := FNodeNumber;
+end; { TOmniNUMANode.GetNodeNumber }
+
+constructor TOmniProcessorGroup.Create(groupNumber: integer; affinity: NativeUInt);
+begin
+  inherited Create;
+  FAffinity := affinity;
+  FGroupNumber := groupNumber;
+end; { TOmniProcessorGroup.Create }
+
+{ TOmniProcessorGroup }
+
+function TOmniProcessorGroup.GetAffinity: NativeUInt;
+begin
+  Result := FAffinity;
+end; { TOmniProcessorGroup.GetAffinity }
+
+function TOmniProcessorGroup.GetGroupNumber: integer;
+begin
+  Result := FGroupNumber;
+end; { TOmniProcessorGroup.GetGroupNumber }
+
+{$ENDIF Win64}
+
 { TOmniEnvironment }
 
 constructor TOmniEnvironment.Create;
@@ -3586,7 +3715,31 @@ begin
   inherited Create;
   oeProcessEnv := TOmniProcessEnvironment.Create;
   oeSystemEnv := TOmniSystemEnvironment.Create;
+{$IFDEF Win64}
+  oeNUMANodes       := TList<IOmniNUMANode>.Create;
+  oeProcessorGroups := TList<IOmniProcessorGroup>.Create;
+  LoadNUMAInfo;
+{$ENDIF}
 end; { TOmniEnvironment.Create }
+
+{$IFDEF Win64}
+destructor TOmniEnvironment.Destroy;
+begin
+  FreeAndNil(oeNUMANodes);
+  FreeAndNil(oeProcessorGroups);
+  inherited;
+end; { TOmniEnvironment.Destroy }
+
+function TOmniEnvironment.GetNUMANodes: TList<IOmniNUMANode>;
+begin
+  Result := oeNUMANodes;
+end; { TOmniEnvironment.GetNUMANodes }
+
+function TOmniEnvironment.GetProcessorGroups: TList<IOmniProcessorGroup>;
+begin
+  Result := oeProcessorGroups;
+end; { TOmniEnvironment.GetProcessorGroups }
+{$ENDIF Win64}
 
 function TOmniEnvironment.GetProcess: IOmniProcessEnvironment;
 begin
@@ -3604,6 +3757,49 @@ begin
     oeThreadEnv := TOmniThreadEnvironment.Create;
   Result := oeThreadEnv;
 end; { TOmniEnvironment.GetThread }
+
+{$IFDEF Win64}
+procedure TOmniEnvironment.LoadNUMAInfo;
+var
+  bufLen     : DWORD;
+  currentInfo: PSystemLogicalProcessorInformationEx;
+  iGroup     : integer;
+  iProc      : integer;
+  pGroupInfo : PProcessorGroupInfo;
+  procInfo   : PSystemLogicalProcessorInformationEx;
+begin
+  bufLen := 0;
+  GetLogicalProcessorInformationEx(Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationAll, nil, bufLen);
+  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+    raise Exception.CreateFmt('TOmniEnvironment.LoadNUMAInfo: GetLogicalProcessorInformation[1] failed with [%d] %s', [GetLastError, SysErrorMessage(GetLastError)]);
+  GetMem(procInfo, bufLen);
+  try
+    if not GetLogicalProcessorInformationEx(Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationAll, Windows.PSYSTEM_LOGICAL_PROCESSOR_INFORMATION(procInfo), bufLen) then
+      raise Exception.CreateFmt('TOmniEnvironment.LoadNUMAInfo: GetLogicalProcessorInformation[2] failed with [%d] %s', [GetLastError, SysErrorMessage(GetLastError)]);
+    iProc := 0;
+    currentInfo := procInfo;
+    while (NativeUInt(currentInfo) - NativeUInt(procInfo)) < bufLen do begin
+      if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationNumaNode then
+        oeNUMANodes.Add(TOmniNUMANode.Create(currentInfo.NumaNode.NodeNumber,
+          currentInfo.NumaNode.GroupMask.Group, currentInfo.NumaNode.GroupMask.Mask))
+      else if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationGroup then begin
+        pGroupInfo := @currentInfo.Group.GroupInfo;
+        for iGroup := 0 to currentInfo.Group.ActiveGroupCount - 1 do begin
+          oeProcessorGroups.Add(TOmniProcessorGroup.Create(iGroup, pGroupInfo^.ActiveProcessorMask));
+          Inc(pGroupInfo);
+        end;
+      end;
+      currentInfo := PSystemLogicalProcessorInformationEx(NativeUInt(currentInfo) + currentInfo.Size);
+      Inc(iProc);
+    end;
+    oeNUMANodes.Sort(TComparer<IOmniNUMANode>.Construct(
+      function (const N1, N2: IOmniNUMANode): integer
+      begin
+        Result := N1.NodeNumber - N2.NodeNumber;
+      end));
+  finally FreeMem(procInfo); end;
+end; { TOmniEnvironment.LoadNUMAInfo }
+{$ENDIF}
 
 { TOmniExecutable }
 
@@ -4029,7 +4225,6 @@ begin
   Result := TInterlocked.Add(Addr^, -value);
   {$ENDIF}
 end; { TOmniAlignedInt64.Subtract }
-
 
 initialization
   Assert(SizeOf(TObject) = {$IFDEF CPUX64}SizeOf(NativeUInt){$ELSE}SizeOf(cardinal){$ENDIF}); //in VarToObj
