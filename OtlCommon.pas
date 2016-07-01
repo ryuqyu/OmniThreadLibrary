@@ -35,10 +35,12 @@
 ///     Blog            : http://thedelphigeek.com
 ///   Contributors      : GJ, Lee_Nover, scarre, Sean B. Durkin
 ///   Creation date     : 2008-06-12
-///   Last modification : 2016-06-27
-///   Version           : 1.41
+///   Last modification : 2016-07-01
+///   Version           : 1.42
 ///</para><para>
 ///   History:
+///     1.42: 2016-07-01
+///       - Implemented Environment.NUMANodes.FindNode.
 ///     1.41: 2016-06-27
 ///       - Environment.ProcessorGroups and .NUMANodes are supported on all platforms.
 ///         Pseudo-group 0 and NUMA node 0 are reported on non-Windows platforms.
@@ -742,18 +744,27 @@ type
 
   {$IFDEF OTL_Generics}
   IOmniNUMANode = interface ['{8D3B415F-8B13-4BFF-B7C7-2D0BC1705217}']
-    function GetAffinity: NativeUInt;
-    function GetGroupNumber: integer;
-    function GetNodeNumber: integer;
+    function  GetAffinity: NativeUInt;
+    function  GetGroupNumber: integer;
+    function  GetNodeNumber: integer;
   //
     property NodeNumber: integer read GetNodeNumber;
     property GroupNumber: integer read GetGroupNumber;
     property Affinity: NativeUInt read GetAffinity;
   end; { IOmniNUMANode }
 
+  IOmniNUMANodes = interface ['{4407E795-ED35-4DD1-9EC6-D59758BAF581}']
+    function GetItem(idx: integer): IOmniNUMANode;
+  //
+    function  Count: integer;
+    function  FindNode(nodeNumber: integer): IOmniNUMANode;
+    function  GetEnumerator: TList<IOmniNUMANode>.TEnumerator;
+    property Item[idx: integer]: IOmniNUMANode read GetItem; default;
+  end; { IOmniNUMANodes }
+
   IOmniProcessorGroup = interface ['{BCFB0AE8-A378-4A4B-AD73-EF9B59218B55}']
-    function GetAffinity: NativeUInt;
-    function GetGroupNumber: integer;
+    function  GetAffinity: NativeUInt;
+    function  GetGroupNumber: integer;
     //
     property GroupNumber: integer read GetGroupNumber;
     property Affinity: NativeUInt read GetAffinity;
@@ -762,7 +773,7 @@ type
 
   IOmniEnvironment = interface ['{4F9594E2-8B88-483C-9616-85B50493406D}']
   {$IFDEF OTL_Generics}
-    function  GetNUMANodes: TList<IOmniNUMANode>;
+    function  GetNUMANodes: IOmniNUMANodes;
     function  GetProcessorGroups: TList<IOmniProcessorGroup>;
   {$ENDIF}
     function  GetProcess: IOmniProcessEnvironment;
@@ -770,7 +781,7 @@ type
     function  GetThread: IOmniThreadEnvironment;
   //
   {$IFDEF OTL_Generics}
-    property NUMANodes: TList<IOmniNUMANode> read GetNUMANodes;
+    property NUMANodes: IOmniNUMANodes read GetNUMANodes;
     property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
   {$ENDIF}
     property Process: IOmniProcessEnvironment read GetProcess;
@@ -1191,6 +1202,28 @@ type
     property NodeNumber: integer read GetNodeNumber;
   end; { TOmniNUMANode }
 
+  IOmniNUMANodesInternal = interface ['{080E0660-4D9C-4F47-994E-9D0337AABB2B}']
+    procedure Add(const node: IOmniNUMANode);
+    procedure Sort;
+  end; { IOmniNUMANodesInternal }
+
+  TOmniNUMANodes = class(TInterfacedObject, IOmniNUMANodes,
+                                            IOmniNUMANodesInternal)
+  private
+    FNodes: TList<IOmniNUMANode>;
+  strict protected
+    function  GetItem(idx: integer): IOmniNUMANode;
+  public
+    constructor Create;
+    destructor  Destroy; override;
+    procedure Add(const node: IOmniNUMANode);
+    function  Count: integer;
+    function  FindNode(nodeNumber: integer): IOmniNUMANode;
+    function  GetEnumerator: TList<IOmniNUMANode>.TEnumerator;
+    procedure Sort;
+    property Item[idx: integer]: IOmniNUMANode read GetItem; default;
+  end; { TOmniNUMANode }
+
   TOmniProcessorGroup = class(TInterfacedObject, IOmniProcessorGroup)
   private
     FAffinity   : NativeUInt;
@@ -1208,7 +1241,7 @@ type
   TOmniEnvironment = class(TInterfacedObject, IOmniEnvironment)
   strict private
   {$IFDEF OTL_Generics}
-    oeNUMANodes      : TList<IOmniNUMANode>;
+    oeNUMANodes      : IOmniNUMANodes;
     oeProcessorGroups: TList<IOmniProcessorGroup>;
   {$ENDIF}
     oeProcessEnv: IOmniProcessEnvironment;
@@ -1220,7 +1253,7 @@ type
   {$ENDIF}
   protected
   {$IFDEF OTL_Generics}
-    function  GetNUMANodes: TList<IOmniNUMANode>;
+    function  GetNUMANodes: IOmniNUMANodes;
     function  GetProcessorGroups: TList<IOmniProcessorGroup>;
   {$ENDIF}
     function  GetProcess: IOmniProcessEnvironment;
@@ -1230,7 +1263,7 @@ type
     constructor Create;
   {$IFDEF OTL_Generics}
     destructor  Destroy; override;
-    property NUMANodes: TList<IOmniNUMANode> read GetNUMANodes;
+    property NUMANodes: IOmniNUMANodes read GetNUMANodes;
     property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
   {$ENDIF}
     property Process: IOmniProcessEnvironment read GetProcess;
@@ -3690,14 +3723,67 @@ begin
   Result := FNodeNumber;
 end; { TOmniNUMANode.GetNodeNumber }
 
+{ TOmniNUMANodes }
+
+constructor TOmniNUMANodes.Create;
+begin
+  inherited Create;
+  FNodes := TList<IOmniNUMANode>.Create;
+end; { TOmniNUMANodes.Create }
+
+destructor TOmniNUMANodes.Destroy;
+begin
+  FreeAndNil(FNodes);
+  inherited;
+end; { TOmniNUMANodes.Destroy }
+
+procedure TOmniNUMANodes.Add(const node: IOmniNUMANode);
+begin
+  FNodes.Add(node);
+end; { TOmniNUMANodes.Add }
+
+function TOmniNUMANodes.Count: integer;
+begin
+  Result := FNodes.Count;
+end; { TOmniNUMANodes.Count }
+
+function TOmniNUMANodes.FindNode(nodeNumber: integer): IOmniNUMANode;
+var
+  node: IOmniNUMANode;
+begin
+  Result := nil;
+  for node in Environment.NUMANodes do
+    if node.NodeNumber = nodeNumber then
+      Exit(node);
+end; { TOmniNUMANodes.FindNode }
+
+function TOmniNUMANodes.GetEnumerator: TList<IOmniNUMANode>.TEnumerator;
+begin
+  Result := FNodes.GetEnumerator;
+end; { TOmniNUMANodes.GetEnumerator }
+
+function TOmniNUMANodes.GetItem(idx: integer): IOmniNUMANode;
+begin
+  Result := FNodes[idx];
+end; { TOmniNUMANodes.GetItem }
+
+procedure TOmniNUMANodes.Sort;
+begin
+  FNodes.Sort(TComparer<IOmniNUMANode>.Construct(
+    function (const N1, N2: IOmniNUMANode): integer
+    begin
+      Result := N1.NodeNumber - N2.NodeNumber;
+    end));
+end; { TOmniNUMANodes.Sort }
+
+{ TOmniProcessorGroup }
+
 constructor TOmniProcessorGroup.Create(groupNumber: integer; affinity: NativeUInt);
 begin
   inherited Create;
   FAffinity := affinity;
   FGroupNumber := groupNumber;
 end; { TOmniProcessorGroup.Create }
-
-{ TOmniProcessorGroup }
 
 function TOmniProcessorGroup.GetAffinity: NativeUInt;
 begin
@@ -3719,7 +3805,7 @@ begin
   oeProcessEnv := TOmniProcessEnvironment.Create;
   oeSystemEnv := TOmniSystemEnvironment.Create;
 {$IFDEF OTL_Generics}
-  oeNUMANodes       := TList<IOmniNUMANode>.Create;
+  oeNUMANodes       := TOmniNUMANodes.Create;
   oeProcessorGroups := TList<IOmniProcessorGroup>.Create;
   LoadNUMAInfo;
 {$ENDIF}
@@ -3728,12 +3814,12 @@ end; { TOmniEnvironment.Create }
 {$IFDEF OTL_Generics}
 destructor TOmniEnvironment.Destroy;
 begin
-  FreeAndNil(oeNUMANodes);
+  oeNUMANodes := nil;
   FreeAndNil(oeProcessorGroups);
   inherited;
 end; { TOmniEnvironment.Destroy }
 
-function TOmniEnvironment.GetNUMANodes: TList<IOmniNUMANode>;
+function TOmniEnvironment.GetNUMANodes: IOmniNUMANodes;
 begin
   Result := oeNUMANodes;
 end; { TOmniEnvironment.GetNUMANodes }
@@ -3795,7 +3881,7 @@ begin
     currentInfo := procInfo;
     while (NativeUInt(currentInfo) - NativeUInt(procInfo)) < bufLen do begin
       if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationNumaNode then
-        oeNUMANodes.Add(TOmniNUMANode.Create(currentInfo.NumaNode.NodeNumber,
+        (oeNUMANodes as IOmniNUMANodesInternal).Add(TOmniNUMANode.Create(currentInfo.NumaNode.NodeNumber,
           currentInfo.NumaNode.GroupMask.Group, currentInfo.NumaNode.GroupMask.Mask))
       else if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationGroup then begin
         pGroupInfo := @currentInfo.Group.GroupInfo;
@@ -3807,11 +3893,7 @@ begin
       currentInfo := PSystemLogicalProcessorInformationEx(NativeUInt(currentInfo) + currentInfo.Size);
       Inc(iProc);
     end;
-    oeNUMANodes.Sort(TComparer<IOmniNUMANode>.Construct(
-      function (const N1, N2: IOmniNUMANode): integer
-      begin
-        Result := N1.NodeNumber - N2.NodeNumber;
-      end));
+    (oeNUMANodes as IOmniNUMANodesInternal).Sort;
   finally FreeMem(procInfo); end;
   {$ENDIF MSWindows}
 end; { TOmniEnvironment.LoadNUMAInfo }
