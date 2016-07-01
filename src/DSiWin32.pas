@@ -8,10 +8,13 @@
                        Christian Wimmer, Tommi Prami, Miha, Craig Peterson, Tommaso Ercole,
                        bero.
    Creation date     : 2002-10-09
-   Last modification : 2016-06-15
-   Version           : 1.88
+   Last modification : 2016-07-01
+   Version           : 1.89
 </pre>*)(*
    History:
+     1.89: 2016-07-01
+       - Implemented dynamically loaded forwarders DSiGetThreadGroupAffinity and
+         DSiSetThreadGroupAffinity.
      1.88: 2016-06-15
        - [shaun07776] C++Builder compatible.
      1.87: 2016-05-18
@@ -1931,6 +1934,7 @@ type
     nSize: DWORD): DWORD; stdcall;
   function  DSiGetProcessMemoryInfo(process: THandle; memCounters: PProcessMemoryCounters;
     cb: DWORD): boolean; stdcall;
+  function  DSiGetThreadGroupAffinity(hThread: THandle; var GroupAffinity: TGroupAffinity): BOOL; stdcall;
   function  DSiGetTickCount64: int64; stdcall;
   function  DSiGetUserProfileDirectoryW(hToken: THandle; lpProfileDir: PWideChar;
     var lpcchSize: DWORD): BOOL; stdcall;
@@ -1958,6 +1962,8 @@ type
   function  DSiSetDllDirectory(path: PChar): boolean; stdcall;
   function  DSiSetSuspendState(hibernate: BOOL; forceCritical: BOOL = false;
     disableWakeEvent: BOOL = false): BOOL; stdcall;
+  function  DSiSetThreadGroupAffinity(hThread: THandle; const GroupAffinity: TGroupAffinity;
+    PreviousGroupAffinity: PGroupAffinity): BOOL; stdcall;
   function  DSiSHEmptyRecycleBin(Wnd: HWND; pszRootPath: PChar;
     dwFlags: DWORD): HRESULT; stdcall;
   function  DSiWinVerifyTrust(hwnd: HWND; const ActionID: TGUID;
@@ -2085,6 +2091,7 @@ type
     nSize: DWORD): DWORD; stdcall;
   TGetProcessMemoryInfo = function(process: THandle; memCounters: PProcessMemoryCounters;
     cb: DWORD): boolean; stdcall;
+  TGetThreadGroupAffinity = function(hThread: THandle; var GroupAffinity: TGroupAffinity): BOOL; stdcall;
   TGetTickCount64 = function: int64; stdcall;
   TGetUserProfileDirectoryW = function(hToken: THandle; lpProfileDir: PWideChar;
     var lpcchSize: DWORD): BOOL; stdcall;
@@ -2111,6 +2118,8 @@ type
   TRevertToSelf = function: BOOL; stdcall;
   TSetDllDirectory = function(path: PChar): boolean; stdcall;
   TSetSuspendState = function(hibernate, forceCritical, disableWakeEvent: BOOL): BOOL; stdcall;
+  TSetThreadGroupAffinity = function(hThread: THandle; const GroupAffinity: TGroupAffinity;
+    PreviousGroupAffinity: PGroupAffinity): BOOL; stdcall;
   TSHEmptyRecycleBin = function(wnd: HWND; pszRootPath: PChar;
     dwFlags: DWORD): HRESULT; stdcall;
   TWinVerifyTrust = function(hwnd: HWND; const ActionID: TGUID;
@@ -2138,6 +2147,7 @@ const
   GGetLongPathName: TGetLongPathName = nil;
   GGetProcessImageFileName: TGetProcessImageFileName = nil;
   GGetProcessMemoryInfo: TGetProcessMemoryInfo = nil;
+  GGetThreadGroupAffinity: TGetThreadGroupAffinity = nil;
   GGetTickCount64: TGetTickCount64 = nil;
   GGetUserProfileDirectoryW: TGetUserProfileDirectoryW = nil;
   GGlobalMemoryStatusEx: TGlobalMemoryStatusEx = nil;
@@ -2155,6 +2165,7 @@ const
   GRevertToSelf: TRevertToSelf = nil;
   GSetDllDirectory: TSetDllDirectory = nil;
   GSetSuspendState: TSetSuspendState = nil;
+  GSetThreadGroupAffinity: TSetThreadGroupAffinity = nil;
   GSHEmptyRecycleBin: TSHEmptyRecycleBin = nil;
   GWinVerifyTrust: TWinVerifyTrust = nil;
   GWow64DisableWow64FsRedirection: TWow64DisableWow64FsRedirection = nil;
@@ -8640,6 +8651,16 @@ var
     end;
   end; { DSiGetProcessMemoryInfo }
 
+  function DSiGetThreadGroupAffinity(hThread: THandle; var GroupAffinity: TGroupAffinity): BOOL;
+  begin
+    if not assigned(GGetThreadGroupAffinity) then
+      GGetThreadGroupAffinity := DSiGetProcAddress('kernel32.dll', 'GetThreadGroupAffinity');
+    if assigned(GGetThreadGroupAffinity) then
+      Result := GGetThreadGroupAffinity(hThread, GroupAffinity)
+    else
+      Result := false;
+  end; { DSiSetThreadGroupAffinity }
+
   function DSiGetTickCount64: int64; stdcall;
   begin
     if not assigned(GGetTickCount64) then
@@ -8849,6 +8870,17 @@ var
     else
       Result := false;
   end; { DSiSetSuspendState }
+
+  function DSiSetThreadGroupAffinity(hThread: THandle; const GroupAffinity: TGroupAffinity;
+    PreviousGroupAffinity: PGroupAffinity): BOOL;
+  begin
+    if not assigned(GSetThreadGroupAffinity) then
+      GSetThreadGroupAffinity := DSiGetProcAddress('kernel32.dll', 'SetThreadGroupAffinity');
+    if assigned(GSetThreadGroupAffinity) then
+      Result := GSetThreadGroupAffinity(hThread, GroupAffinity, PreviousGroupAffinity)
+    else
+      Result := false;
+  end; { DSiSetThreadGroupAffinity }
 
   function DSiSHEmptyRecycleBin(Wnd: HWND; pszRootPath: PChar;
     dwFlags: DWORD): HRESULT; stdcall;
