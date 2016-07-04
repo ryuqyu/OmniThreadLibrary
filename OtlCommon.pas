@@ -742,7 +742,7 @@ type
     property ID: TThreadId read GetID;
   end; { IOmniThreadEnvironment }
 
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
   IOmniNUMANode = interface ['{8D3B415F-8B13-4BFF-B7C7-2D0BC1705217}']
     function  GetAffinity: NativeUInt;
     function  GetGroupNumber: integer;
@@ -769,21 +769,21 @@ type
     property GroupNumber: integer read GetGroupNumber;
     property Affinity: NativeUInt read GetAffinity;
   end; { IOmniProcessorGroup }
-  {$ENDIF OTL_Generics}
+  {$ENDIF OTL_NUMASupport}
 
   IOmniEnvironment = interface ['{4F9594E2-8B88-483C-9616-85B50493406D}']
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
     function  GetNUMANodes: IOmniNUMANodes;
     function  GetProcessorGroups: TList<IOmniProcessorGroup>;
-  {$ENDIF}
+  {$ENDIF OTL_NUMASupport}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
     function  GetThread: IOmniThreadEnvironment;
   //
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
     property NUMANodes: IOmniNUMANodes read GetNUMANodes;
     property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
-  {$ENDIF}
+  {$ENDIF OTL_NUMASupport}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
     property Thread: IOmniThreadEnvironment read GetThread;
@@ -1185,7 +1185,7 @@ type
     property ID: TThreadID read GetID;
   end; { TOmniThreadEnvironment }
 
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
   TOmniNUMANode = class(TInterfacedObject, IOmniNUMANode)
   private
     FAffinity   : NativeUInt;
@@ -1236,36 +1236,34 @@ type
     property Affinity: NativeUInt read GetAffinity;
     property GroupNumber: integer read GetGroupNumber;
   end; { TOmniProcessorGroup }
-  {$ENDIF OTL_Generics}
+  {$ENDIF OTL_NUMASupport}
 
   TOmniEnvironment = class(TInterfacedObject, IOmniEnvironment)
   strict private
-  {$IFDEF OTL_Generics}
-    oeNUMANodes      : IOmniNUMANodes;
-    oeProcessorGroups: TList<IOmniProcessorGroup>;
-  {$ENDIF}
     oeProcessEnv: IOmniProcessEnvironment;
     oeSystemEnv : IOmniSystemEnvironment;
     oeThreadEnv : IOmniThreadEnvironment;
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
+    oeNUMANodes      : IOmniNUMANodes;
+    oeProcessorGroups: TList<IOmniProcessorGroup>;
   strict protected
     procedure LoadNUMAInfo;
-  {$ENDIF}
+  {$ENDIF OTL_NUMASupport}
   protected
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
     function  GetNUMANodes: IOmniNUMANodes;
     function  GetProcessorGroups: TList<IOmniProcessorGroup>;
-  {$ENDIF}
+  {$ENDIF OTL_NUMASupport}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
     function  GetThread: IOmniThreadEnvironment;
   public
     constructor Create;
-  {$IFDEF OTL_Generics}
+  {$IFDEF OTL_NUMASupport}
     destructor  Destroy; override;
     property NUMANodes: IOmniNUMANodes read GetNUMANodes;
     property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
-  {$ENDIF}
+  {$ENDIF OTL_NUMASupport}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
     property Thread: IOmniThreadEnvironment read GetThread;
@@ -3696,7 +3694,7 @@ begin
   Result := oteThreadID;
 end; { TOmniThreadEnvironment.GetID }
 
-{$IFDEF OTL_Generics}
+{$IFDEF OTL_NUMASupport}
 
 { TOmniNUMANode }
 
@@ -3795,7 +3793,7 @@ begin
   Result := FGroupNumber;
 end; { TOmniProcessorGroup.GetGroupNumber }
 
-{$ENDIF OTL_Generics}
+{$ENDIF OTL_NUMASupport}
 
 { TOmniEnvironment }
 
@@ -3804,14 +3802,14 @@ begin
   inherited Create;
   oeProcessEnv := TOmniProcessEnvironment.Create;
   oeSystemEnv := TOmniSystemEnvironment.Create;
-{$IFDEF OTL_Generics}
+{$IFDEF OTL_NUMASupport}
   oeNUMANodes       := TOmniNUMANodes.Create;
   oeProcessorGroups := TList<IOmniProcessorGroup>.Create;
   LoadNUMAInfo;
-{$ENDIF}
+{$ENDIF OTL_NUMASupport}
 end; { TOmniEnvironment.Create }
 
-{$IFDEF OTL_Generics}
+{$IFDEF OTL_NUMASupport}
 destructor TOmniEnvironment.Destroy;
 begin
   oeNUMANodes := nil;
@@ -3828,7 +3826,7 @@ function TOmniEnvironment.GetProcessorGroups: TList<IOmniProcessorGroup>;
 begin
   Result := oeProcessorGroups;
 end; { TOmniEnvironment.GetProcessorGroups }
-{$ENDIF OTL_Generics}
+{$ENDIF OTL_NUMASupport}
 
 function TOmniEnvironment.GetProcess: IOmniProcessEnvironment;
 begin
@@ -3847,7 +3845,7 @@ begin
   Result := oeThreadEnv;
 end; { TOmniEnvironment.GetThread }
 
-{$IFDEF OTL_Generics}
+{$IFDEF OTL_NUMASupport}
 procedure TOmniEnvironment.LoadNUMAInfo;
 var
 {$IFNDEF MSWindows}
@@ -3857,7 +3855,6 @@ var
   bufLen     : DWORD;
   currentInfo: PSystemLogicalProcessorInformationEx;
   iGroup     : integer;
-  iProc      : integer;
   pGroupInfo : PProcessorGroupInfo;
   procInfo   : PSystemLogicalProcessorInformationEx;
 {$ENDIF}
@@ -3877,7 +3874,6 @@ begin
   try
     if not GetLogicalProcessorInformationEx(Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationAll, Windows.PSYSTEM_LOGICAL_PROCESSOR_INFORMATION(procInfo), bufLen) then
       raise Exception.CreateFmt('TOmniEnvironment.LoadNUMAInfo: GetLogicalProcessorInformation[2] failed with [%d] %s', [GetLastError, SysErrorMessage(GetLastError)]);
-    iProc := 0;
     currentInfo := procInfo;
     while (NativeUInt(currentInfo) - NativeUInt(procInfo)) < bufLen do begin
       if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationNumaNode then
@@ -3891,13 +3887,12 @@ begin
         end;
       end;
       currentInfo := PSystemLogicalProcessorInformationEx(NativeUInt(currentInfo) + currentInfo.Size);
-      Inc(iProc);
     end;
     (oeNUMANodes as IOmniNUMANodesInternal).Sort;
   finally FreeMem(procInfo); end;
   {$ENDIF MSWindows}
 end; { TOmniEnvironment.LoadNUMAInfo }
-{$ENDIF OTL_Generics}
+{$ENDIF OTL_NUMASupport}
 
 { TOmniExecutable }
 

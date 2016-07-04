@@ -37,7 +37,8 @@ uses
   DSiWin32,
   OtlTask,
   OtlTaskControl,
-  OtlCommon;
+  OtlCommon,
+  OtlThreadPool;
 
 {$R *.dfm}
 
