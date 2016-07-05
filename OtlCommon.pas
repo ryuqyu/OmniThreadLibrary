@@ -241,6 +241,7 @@ uses
   Variants,
   TypInfo,
   SyncObjs,
+  Types,
 {$IFDEF MSWINDOWS}
   Windows,
   DSiWin32,
@@ -674,6 +675,34 @@ type
     function  ValueOf(const key: int64): IInterface;
   end; { IOmniInterfaceDictionary }
 
+  IOmniIntegerSet = interface;
+
+  TOmniIntegerSetChangedEvent = procedure(const intSet: IOmniIntegerSet) of object;
+
+  IOmniIntegerSet = interface ['{571F85D0-CFD8-40FE-8860-A8C1C932028C}']
+    function  GetAsBits: TBits;
+    function  GetAsIntArray: TIntegerDynArray;
+    function  GetItem(idx: integer): integer;
+    function  GetOnChange: TOmniIntegerSetChangedEvent;
+    procedure SetAsBits(const Value: TBits);
+    procedure SetAsIntArray(const Value: TIntegerDynArray);
+    procedure SetItem(idx: integer; const value: integer);
+    procedure SetOnChange(const value: TOmniIntegerSetChangedEvent);
+  {$IFDEF OTL_Generics}
+    function  GetAsArray: TArray<integer>;
+    procedure SetAsArray(const Value: TArray<integer>);
+  {$ENDIF OTL_Generics}
+  //
+    function  Count: integer;
+  {$IFDEF OTL_Generics}
+    property AsArray: TArray<integer> read GetAsArray write SetAsArray;
+  {$ENDIF OTL_Generics}
+    property AsBits: TBits read GetAsBits write SetAsBits;
+    property AsIntArray: TIntegerDynArray read GetAsIntArray write SetAsIntArray;
+    property OnChange: TOmniIntegerSetChangedEvent read GetOnChange write SetOnChange;
+    property Item[idx: integer]: integer read GetItem write SetItem;
+  end; { IOmniIntegerSet }
+
   IOmniAffinity = interface ['{8A6DDC70-F705-4577-869B-6810E776132B}']
     function  GetAsString: string;
     function  GetCount: integer;
@@ -681,7 +710,7 @@ type
     procedure SetAsString(const value: string);
     procedure SetCount(const value: integer);
   {$IFDEF MSWINDOWS}
-    function GetMask: NativeUInt;
+    function  GetMask: NativeUInt;
     procedure SetMask(const value: NativeUInt);
   {$ENDIF}
   //
@@ -925,6 +954,40 @@ type
     function  Subtract(value: int64): int64; inline;
     property Value: int64 read GetValue write SetValue;
   end; { TOmniAlignedInt64 }
+
+  TOmniIntegerSet = class(TInterfacedObject, IOmniIntegerSet)
+  strict private
+    FBits        : TBits;
+    FHasValueCopy: boolean;
+    FOnChange    : TOmniIntegerSetChangedEvent;
+    FValueCopy   : TIntegerDynArray;
+  strict protected
+    procedure DoOnChange;
+    function  GetAsBits: TBits;
+    function  GetAsIntArray: TIntegerDynArray;
+    function  GetItem(idx: integer): integer;
+    function  GetOnChange: TOmniIntegerSetChangedEvent;
+    procedure PrepareValueCopy;
+    procedure SetAsBits(const value: TBits);
+    procedure SetAsIntArray(const value: TIntegerDynArray);
+    procedure SetOnChange(const value: TOmniIntegerSetChangedEvent);
+    procedure SetItem(idx: integer; const Value: integer);
+  {$IFDEF OTL_Generics}
+    function  GetAsArray: TArray<integer>;
+    procedure SetAsArray(const value: TArray<integer>);
+  {$ENDIF OTL_Generics}
+  public
+    constructor Create;
+    destructor  Destroy; override;
+    function  Count: integer;
+  {$IFDEF OTL_Generics}
+    property AsArray: TArray<integer> read GetAsArray write SetAsArray;
+  {$ENDIF OTL_Generics}
+    property AsBits: TBits read GetAsBits write SetAsBits;
+    property AsIntArray: TIntegerDynArray read GetAsIntArray write SetAsIntArray;
+    property OnChange: TOmniIntegerSetChangedEvent read GetOnChange write SetOnChange;
+    property Item[idx: integer]: integer read GetItem write SetItem;
+  end; { TOmniIntegerSet }
 
 {$IFNDEF MSWINDOWS}
   TObjectList = class(TObjectList<TObject>)
@@ -4318,6 +4381,151 @@ begin
   Result := TInterlocked.Add(Addr^, -value);
   {$ENDIF}
 end; { TOmniAlignedInt64.Subtract }
+
+{ TOmniIntegerSet }
+
+constructor TOmniIntegerSet.Create;
+begin
+  inherited Create;
+  FBits := TBits.Create;
+end; { TOmniIntegerSet.Create }
+
+destructor TOmniIntegerSet.Destroy;
+begin
+  FreeAndNil(FBits);
+  inherited;
+end; { TOmniIntegerSet.Destroy }
+
+function TOmniIntegerSet.Count: integer;
+begin
+  PrepareValueCopy;
+  Result := Length(FValueCopy);
+end; { TOmniIntegerSet.Count }
+
+procedure TOmniIntegerSet.DoOnChange;
+begin
+  FHasValueCopy := false;
+  if assigned(OnChange) then
+    OnChange(Self);
+end; { TOmniIntegerSet.DoOnChange }
+
+{$IFDEF OTL_Generics}
+function TOmniIntegerSet.GetAsArray: TArray<integer>;
+var
+  count: integer;
+  i    : integer;
+begin
+  count := 0;
+  for i := 0 to FBits.Size - 1 do
+    if FBits[i] then
+      Inc(count);
+  SetLength(Result, count);
+  count := 0;
+  for i := 0 to FBits.Size - 1 do
+    if FBits[i] then begin
+      Result[count] := i;
+      Inc(count);
+    end;
+end; { TOmniIntegerSet.GetAsArray }
+{$ENDIF OTL_Generics}
+
+function TOmniIntegerSet.GetAsBits: TBits;
+begin
+  Result := FBits;
+end; { TOmniIntegerSet.GetAsBits }
+
+function TOmniIntegerSet.GetAsIntArray: TIntegerDynArray;
+var
+  count: integer;
+  i    : integer;
+begin
+  count := 0;
+  for i := 0 to FBits.Size - 1 do
+    if FBits[i] then
+      Inc(count);
+  SetLength(Result, count);
+  count := 0;
+  for i := 0 to FBits.Size - 1 do
+    if FBits[i] then begin
+      Result[count] := i;
+      Inc(count);
+    end;
+end; { TOmniIntegerSet.GetAsIntArray }
+
+function TOmniIntegerSet.GetItem(idx: integer): integer;
+begin
+  PrepareValueCopy;
+  Result := FValueCopy[idx];
+end; { TOmniIntegerSet.GetItem }
+
+function TOmniIntegerSet.GetOnChange: TOmniIntegerSetChangedEvent;
+begin
+  Result := FOnChange;
+end; { TOmniIntegerSet.GetOnChange }
+
+procedure TOmniIntegerSet.PrepareValueCopy;
+begin
+  if FHasValueCopy then
+    Exit;
+  FValueCopy := AsIntArray;
+  FHasValueCopy := true;
+end; { TOmniIntegerSet.PrepareValueCopy }
+
+{$IFDEF OTL_Generics}
+procedure TOmniIntegerSet.SetAsArray(const value: TArray<integer>);
+var
+  max: integer;
+  val: integer;
+begin
+  max := 0;
+  for val in value do
+    if val > max then
+      max := val;
+  FBits.Size := max + 1;
+  for val := 0 to FBits.Size - 1 do
+    FBits[val] := false;
+  for val in value do
+    FBits[val] := true;
+  DoOnChange;
+end; { TOmniIntegerSet.SetAsArray }
+{$ENDIF OTL_Generics}
+
+procedure TOmniIntegerSet.SetAsBits(const value: TBits);
+var
+  i: integer;
+begin
+  FBits.Size := value.Size;
+  for i := 0 to value.Size - 1 do
+    FBits[i] := value[i];
+  DoOnChange;
+end; { TOmniIntegerSet.SetAsBits }
+
+procedure TOmniIntegerSet.SetAsIntArray(const value: TIntegerDynArray);
+var
+  max: integer;
+  val: integer;
+begin
+  max := 0;
+  for val in value do
+    if val > max then
+      max := val;
+  FBits.Size := max + 1;
+  for val := 0 to FBits.Size - 1 do
+    FBits[val] := false;
+  for val in value do
+    FBits[val] := true;
+  DoOnChange;
+end; { TOmniIntegerSet.SetAsIntArray }
+
+procedure TOmniIntegerSet.SetItem(idx: integer; const Value: integer);
+begin
+  // TODO -cMM: TOmniIntegerSet.SetItem default body inserted
+end;
+
+procedure TOmniIntegerSet.SetOnChange(const value: TOmniIntegerSetChangedEvent);
+begin
+  FOnChange := value;
+end; { TOmniIntegerSet.SetOnChange }
 
 initialization
   Assert(SizeOf(TObject) = {$IFDEF CPUX64}SizeOf(NativeUInt){$ELSE}SizeOf(cardinal){$ENDIF}); //in VarToObj
