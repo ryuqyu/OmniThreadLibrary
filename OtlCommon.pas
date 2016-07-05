@@ -682,11 +682,12 @@ type
   IOmniIntegerSet = interface ['{571F85D0-CFD8-40FE-8860-A8C1C932028C}']
     function  GetAsBits: TBits;
     function  GetAsIntArray: TIntegerDynArray;
+    function  GetAsMask: int64;
     function  GetItem(idx: integer): integer;
     function  GetOnChange: TOmniIntegerSetChangedEvent;
-    procedure SetAsBits(const Value: TBits);
+    procedure SetAsBits(const value: TBits);
     procedure SetAsIntArray(const Value: TIntegerDynArray);
-    procedure SetItem(idx: integer; const value: integer);
+    procedure SetAsMask(const value: int64);
     procedure SetOnChange(const value: TOmniIntegerSetChangedEvent);
   {$IFDEF OTL_Generics}
     function  GetAsArray: TArray<integer>;
@@ -701,8 +702,9 @@ type
   {$ENDIF OTL_Generics}
     property AsBits: TBits read GetAsBits write SetAsBits;
     property AsIntArray: TIntegerDynArray read GetAsIntArray write SetAsIntArray;
+    property AsMask: int64 read GetAsMask write SetAsMask;
     property OnChange: TOmniIntegerSetChangedEvent read GetOnChange write SetOnChange;
-    property Item[idx: integer]: integer read GetItem write SetItem; default;
+    property Item[idx: integer]: integer read GetItem; default;
   end; { IOmniIntegerSet }
 
   TOmniIntegerSet = class(TInterfacedObject, IOmniIntegerSet)
@@ -716,14 +718,15 @@ type
     procedure DoOnChange;
     function  GetAsBits: TBits;
     function  GetAsIntArray: TIntegerDynArray;
+    function  GetAsMask: int64;
     function  GetItem(idx: integer): integer;
     function  GetOnChange: TOmniIntegerSetChangedEvent;
     procedure PrepareValueCopy;
     function  Remove(value: integer): boolean;
     procedure SetAsBits(const value: TBits);
     procedure SetAsIntArray(const value: TIntegerDynArray);
+    procedure SetAsMask(const value: int64);
     procedure SetOnChange(const value: TOmniIntegerSetChangedEvent);
-    procedure SetItem(idx: integer; const Value: integer);
   {$IFDEF OTL_Generics}
     function  GetAsArray: TArray<integer>;
     procedure SetAsArray(const value: TArray<integer>);
@@ -737,8 +740,9 @@ type
   {$ENDIF OTL_Generics}
     property AsBits: TBits read GetAsBits write SetAsBits;
     property AsIntArray: TIntegerDynArray read GetAsIntArray write SetAsIntArray;
+    property AsMask: int64 read GetAsMask write SetAsMask;
     property OnChange: TOmniIntegerSetChangedEvent read GetOnChange write SetOnChange;
-    property Item[idx: integer]: integer read GetItem write SetItem; default;
+    property Item[idx: integer]: integer read GetItem; default;
   end; { TOmniIntegerSet }
 
   IOmniAffinity = interface ['{8A6DDC70-F705-4577-869B-6810E776132B}']
@@ -4465,6 +4469,21 @@ begin
     end;
 end; { TOmniIntegerSet.GetAsIntArray }
 
+function TOmniIntegerSet.GetAsMask: int64;
+var
+  i: integer;
+begin
+  if FBits.Size > 64 then
+    raise Exception.CreateFmt('Cannot convert %d elements to a 8-byte mask', [FBits.Size]);
+
+  Result := 0;
+  for i := FBits.Size - 1 downto 0 do begin
+    Result := Result SHL 1;
+    if FBits[i] then
+      Result := Result OR 1;
+  end;
+end; { TOmniIntegerSet.GetAsMask }
+
 function TOmniIntegerSet.GetItem(idx: integer): integer;
 begin
   PrepareValueCopy;
@@ -4542,10 +4561,27 @@ begin
   DoOnChange;
 end; { TOmniIntegerSet.SetAsIntArray }
 
-procedure TOmniIntegerSet.SetItem(idx: integer; const Value: integer);
+procedure TOmniIntegerSet.SetAsMask(const value: int64);
+var
+  b  : boolean;
+  i  : integer;
+  max: integer;
+  val: int64;
 begin
-  // TODO -cMM: TOmniIntegerSet.SetItem default body inserted
-end;
+  FBits.Size := 64;
+  val := value;
+  max := 0;
+  for i := 0 to FBits.Size - 1 do begin
+    b := Odd(val);
+    if b then
+      max := i;
+    FBits[i] := b;
+    val := val SHR 1;
+  end;
+  if max <> 63 then
+    FBits.Size := max + 1;
+  DoOnChange;
+end; { TOmniIntegerSet.SetAsMask }
 
 procedure TOmniIntegerSet.SetOnChange(const value: TOmniIntegerSetChangedEvent);
 begin

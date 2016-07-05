@@ -49,6 +49,7 @@ type
     procedure TestAsIntArrayDup;
     procedure TestAsArray;
     procedure TestAsArrayDup;
+    procedure TestAsMask;
     procedure TestValues;
     procedure TestAddRemove;
   end;
@@ -311,6 +312,19 @@ begin
   CheckEquals(2, Length(ar2));
   CheckEquals(1, ar2[0]);
   CheckEquals(3, ar2[1]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsMask;
+var
+  arr: TArray<integer>;
+begin
+  FIntegerSet.AsMask := $84;
+  arr := FIntegerSet.AsArray;
+  CheckEquals(2, Length(arr));
+  CheckEquals(2, arr[0]);
+  CheckEquals(7, arr[1]);
+  FIntegerSet.AsArray := [6,3];
+  CheckEquals($48, FIntegerSet.AsMask);
 end;
 
 procedure TestIOmniIntegerSet.TestValues;
