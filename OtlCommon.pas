@@ -36,9 +36,12 @@
 ///   Contributors      : GJ, Lee_Nover, scarre, Sean B. Durkin
 ///   Creation date     : 2008-06-12
 ///   Last modification : 2016-07-01
-///   Version           : 1.42
+///   Version           : 1.43
 ///</para><para>
 ///   History:
+///     1.43: 2016-07-05
+///       - Implemented IOmniIntegerSet.
+///       - Implemented IOmniThreadEnvironment.GroupAffinity.
 ///     1.42: 2016-07-01
 ///       - Implemented Environment.NUMANodes.FindNode.
 ///     1.41: 2016-06-27
@@ -805,11 +808,24 @@ type
   TThreadID = LongWord;
   {$ENDIF ~OTL_HasThreadID}
 
+  TOmniGroupAffinity = record
+  private
+    FAffinity: IOmniIntegerSet;
+    FGroup   : integer;
+    function GetAffinity: IOmniIntegerSet;
+  public
+    property Group: integer read FGroup write FGroup;
+    property Affinity: IOmniIntegerSet read GetAffinity;
+  end; { TOmniGroupAffinity }
+
   IOmniThreadEnvironment = interface ['{5C11FEC7-9FBE-423F-B30E-543C8240E3A3}']
     function  GetAffinity: IOmniAffinity;
+    function  GetGroupAffinity: TOmniGroupAffinity;
     function  GetID: TThreadId;
+    procedure SetGroupAffinity(const value: TOmniGroupAffinity);
   //
     property Affinity: IOmniAffinity read GetAffinity;
+    property GroupAffinity: TOmniGroupAffinity read GetGroupAffinity write SetGroupAffinity;
     property ID: TThreadId read GetID;
   end; { IOmniThreadEnvironment }
 
@@ -1026,7 +1042,8 @@ implementation
 {$IFDEF MSWINDOWS}
 uses
   {$IFDEF OTL_StrPasInAnsiStrings}System.AnsiStrings,{$ENDIF}
-  GpStringHash;
+  GpStringHash,
+  OtlSync;
 {$ENDIF}
 
 type
@@ -1246,13 +1263,16 @@ type
   TOmniThreadEnvironment = class(TInterfacedObject, IOmniThreadEnvironment)
   strict private
     oteAffinity: IOmniAffinity;
-    oteThreadID:  TThreadID;
+    oteThreadID: TThreadID;
   protected
     function  GetAffinity: IOmniAffinity;
+    function  GetGroupAffinity: TOmniGroupAffinity;
     function  GetID: TThreadID;
+    procedure SetGroupAffinity(const value: TOmniGroupAffinity);
   public
     constructor Create;
     property Affinity: IOmniAffinity read GetAffinity;
+    property GroupAffinity: TOmniGroupAffinity read GetGroupAffinity write SetGroupAffinity;
     property ID: TThreadID read GetID;
   end; { TOmniThreadEnvironment }
 
@@ -3760,10 +3780,40 @@ begin
   Result := oteAffinity;
 end; { TOmniThreadEnvironment.GetAffinity }
 
+function TOmniThreadEnvironment.GetGroupAffinity: TOmniGroupAffinity;
+var
+  groupAffinity: TGroupAffinity;
+begin
+  {$IFDEF MSWindows}
+  DSiGetThreadGroupAffinity(GetCurrentThread, groupAffinity);
+  Result.Group := groupAffinity.Group;
+  Result.Affinity.AsMask := groupAffinity.Mask;
+  {$ELSE}
+  Result.Group := 0;
+  Result.Affinity.AsMask := Affinity.Mask;
+  {$ENDIF}
+end; { TOmniThreadEnvironment.GetGroupAffinity }
+
 function TOmniThreadEnvironment.GetID: TThreadId;
 begin
   Result := oteThreadID;
 end; { TOmniThreadEnvironment.GetID }
+
+procedure TOmniThreadEnvironment.SetGroupAffinity(const value: TOmniGroupAffinity);
+var
+  groupAffinity: TGroupAffinity;
+begin
+  {$IFDEF MSWindows}
+  FillChar(groupAffinity, SizeOf(groupAffinity), 0);
+  groupAffinity.Group := value.Group;
+  groupAffinity.Mask := value.Affinity.AsMask;
+  DSiSetThreadGroupAffinity(GetCurrentThread, groupAffinity, nil);
+  {$ELSE}
+  if value.Group <> 0 then
+    raise Exception.Create('TOmniThreadEnvironment.SetGroupAffinity: Processor group must be 0');
+  Affinity.Mask := value.Affinity.AsMask;
+  {$ENDIF}
+end; { TOmniThreadEnvironment.SetGroupAffinity }
 
 {$IFDEF OTL_NUMASupport}
 
@@ -4587,6 +4637,23 @@ procedure TOmniIntegerSet.SetOnChange(const value: TOmniIntegerSetChangedEvent);
 begin
   FOnChange := value;
 end; { TOmniIntegerSet.SetOnChange }
+
+{ TOmniGroupAffinity }
+
+function TOmniGroupAffinity.GetAffinity: IOmniIntegerSet;
+var
+  syncMask: IOmniIntegerSet;
+begin
+  if not assigned(FAffinity) then begin
+    syncMask := TOmniIntegerSet.Create;
+    {$IFDEF MSWINDOWS}
+    if CAS(nil, pointer(syncMask), FAffinity) then
+    {$ELSE}
+    if TInterlocked.CompareExchange(pointer(FAffinity), pointer(syncMask), nil) = nil then
+    {$ENDIF}
+      pointer(syncMask) := nil;
+  end;
+end; { TOmniGroupAffinity.GetAffinity }
 
 initialization
   Assert(SizeOf(TObject) = {$IFDEF CPUX64}SizeOf(NativeUInt){$ELSE}SizeOf(cardinal){$ENDIF}); //in VarToObj
