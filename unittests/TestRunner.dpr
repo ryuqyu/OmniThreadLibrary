@@ -21,6 +21,7 @@ uses
   GUITestRunner,
   TextTestRunner,
   SmokeTest in 'SmokeTest.pas',
+  TestOtlCommon1 in 'TestOtlCommon1.pas',
   TestBlockingCollection1 in 'TestBlockingCollection1.pas',
   TestOtlDataManager1 in 'TestOtlDataManager1.pas',
   TestOmniInterfaceDictionary in 'TestOmniInterfaceDictionary.pas',

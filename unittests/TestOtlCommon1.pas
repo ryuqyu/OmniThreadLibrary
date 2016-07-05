@@ -37,7 +37,26 @@ type
     procedure TestRetrieve5;
   end;
 
+  TestIOmniIntegerSet = class(TTestCase)
+  strict private
+    FIntegerSet: IOmniIntegerSet;
+  public
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAsBits;
+    procedure TestAsIntArray;
+    procedure TestAsIntArrayDup;
+    procedure TestAsArray;
+    procedure TestAsArrayDup;
+    procedure TestValues;
+    procedure TestAddRemove;
+  end;
+
 implementation
+
+uses
+  System.Types;
 
 var
   GTestValueCount: integer;
@@ -184,8 +203,133 @@ begin
   FValue := value;
 end;
 
+{ TestIOmniIntegerSet }
+
+procedure TestIOmniIntegerSet.SetUp;
+begin
+  FIntegerSet := TOmniIntegerSet.Create;
+end;
+
+procedure TestIOmniIntegerSet.TearDown;
+begin
+  FIntegerSet := nil;
+end;
+
+procedure TestIOmniIntegerSet.TestAddRemove;
+var
+  arr: TArray<integer>;
+begin
+  FIntegerSet.AsArray := [1];
+  CheckEquals(true, FIntegerSet.Add(1));
+  CheckEquals(false, FIntegerSet.Add(2));
+  CheckEquals(true, FIntegerSet.Add(2));
+  CheckEquals(false, FIntegerSet.Add(4));
+  CheckEquals(false, FIntegerSet.Remove(3));
+  CheckEquals(true, FIntegerSet.Remove(2));
+  CheckEquals(false, FIntegerSet.Remove(2));
+  arr := FIntegerSet.AsArray;
+  CheckEquals(2, Length(arr));
+  CheckEquals(1, arr[0]);
+  CheckEquals(4, arr[1]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsArray;
+var
+  arr: TArray<integer>;
+begin
+  FIntegerSet.AsArray := [1,3,6];
+  arr := FIntegerSet.AsArray;
+  CheckEquals(3, Length(arr));
+  CheckEquals(1, arr[0]);
+  CheckEquals(3, arr[1]);
+  CheckEquals(6, arr[2]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsArrayDup;
+var
+  arr: TArray<integer>;
+begin
+  FIntegerSet.AsArray := [1,3,3];
+  arr := FIntegerSet.AsArray;
+  CheckEquals(2, Length(arr));
+  CheckEquals(1, arr[0]);
+  CheckEquals(3, arr[1]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsBits;
+var
+  b1: TBits;
+  b2: TBits;
+begin
+  b1 := TBits.Create;
+  try
+    b1.Size := 8;
+    b1[1] := true;
+    b1[3] := true;
+    b1[6] := true;
+    FIntegerSet.AsBits := b1;
+  finally FreeAndNil(b1); end;
+  b2 := FIntegerSet.AsBits;
+  CheckEquals(7, b2.Size);
+  CheckEquals(false, b2[0]);
+  CheckEquals(true, b2[1]);
+  CheckEquals(false, b2[2]);
+  CheckEquals(true, b2[3]);
+  CheckEquals(false, b2[4]);
+  CheckEquals(false, b2[5]);
+  CheckEquals(true, b2[6]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsIntArray;
+var
+  ar1: TIntegerDynArray;
+  ar2: TIntegerDynArray;
+begin
+  SetLength(ar1, 3);
+  ar1[0] := 1;
+  ar1[1] := 3;
+  ar1[2] := 6;
+  FIntegerSet.AsIntArray := ar1;
+  ar2 := FIntegerSet.AsIntArray;
+  CheckEquals(3, Length(ar2));
+  CheckEquals(1, ar2[0]);
+  CheckEquals(3, ar2[1]);
+  CheckEquals(6, ar2[2]);
+end;
+
+procedure TestIOmniIntegerSet.TestAsIntArrayDup;
+var
+  ar1: TIntegerDynArray;
+  ar2: TIntegerDynArray;
+begin
+  SetLength(ar1, 3);
+  ar1[0] := 1;
+  ar1[1] := 3;
+  ar1[2] := 3;
+  FIntegerSet.AsIntArray := ar1;
+  ar2 := FIntegerSet.AsIntArray;
+  CheckEquals(2, Length(ar2));
+  CheckEquals(1, ar2[0]);
+  CheckEquals(3, ar2[1]);
+end;
+
+procedure TestIOmniIntegerSet.TestValues;
+begin
+  FIntegerSet.AsArray := [1,6,3];
+  CheckEquals(3, FIntegerSet.Count);
+  CheckEquals(1, FIntegerSet[0]);
+  CheckEquals(3, FIntegerSet[1]);
+  CheckEquals(6, FIntegerSet[2]);
+
+  FIntegerSet.AsArray := [1,3,3];
+  CheckEquals(2, FIntegerSet.Count);
+  CheckEquals(1, FIntegerSet[0]);
+  CheckEquals(3, FIntegerSet[1]);
+end;
+
 initialization
   // Register any test cases with the test runner
   RegisterTest(TestIOmniInterfaceDictionary.Suite);
+  RegisterTest(TestIOmniIntegerSet.Suite);
 end.
 
