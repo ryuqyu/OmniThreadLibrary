@@ -186,6 +186,11 @@ type
     procedure CancelAll;
     function  CountExecuting: integer;
     function  CountQueued: integer;
+    function  GetAffinity: IOmniIntegerSet;
+  {$IFDEF OTL_NUMASupport}
+    function  GetNUMANodes: IOmniIntegerSet;
+    function  GetProcessorGroups: IOmniIntegerSet;
+  {$ENDIF OTL_NUMASupport}
     function  IsIdle: boolean;
     function  MonitorWith(const monitor: IOmniThreadPoolMonitor): IOmniThreadPool;
     function  RemoveMonitor: IOmniThreadPool;
@@ -194,6 +199,7 @@ type
     procedure SetThreadDataFactory(const value: TOTPThreadDataFactoryFunction); overload;
     property IdleWorkerThreadTimeout_sec: integer read GetIdleWorkerThreadTimeout_sec
       write SetIdleWorkerThreadTimeout_sec;
+    property Affinity: IOmniIntegerSet read GetAffinity;
     property MaxExecuting: integer read GetMaxExecuting write SetMaxExecuting;
     property MaxQueued: integer read GetMaxQueued write SetMaxQueued;
     property MaxQueuedTime_sec: integer read GetMaxQueuedTime_sec write
@@ -203,6 +209,10 @@ type
     property UniqueID: int64 read GetUniqueID;
     property WaitOnTerminate_sec: integer read GetWaitOnTerminate_sec
       write SetWaitOnTerminate_sec;
+    {$IFDEF OTL_NUMASupport}
+    property ProcessorGroups: IOmniIntegerSet read GetProcessorGroups;
+    property NUMANodes: IOmniIntegerSet read GetNUMANodes;
+    {$ENDIF OTL_NUMASupport}
   end; { IOmniThreadPool }
 
   IOmniThreadPoolScheduler = interface
@@ -399,22 +409,35 @@ type
 
   TOmniThreadPool = class(TInterfacedObject, IOmniThreadPool, IOmniThreadPoolScheduler)
   strict private
+    otpAffinity         : IOmniIntegerSet;
     otpPoolName         : string;
     otpThreadDataFactory: TOTPThreadDataFactory;
     otpUniqueID         : int64;
     otpWorker           : IOmniWorker;
     otpWorkerTask       : IOmniTaskControl;
+  {$IFDEF OTL_NUMASupport}
+    otpNUMANodes        : IOmniIntegerSet;
+    otpProcessorGroups  : IOmniIntegerSet;
+  {$ENDIF OTL_NUMASupport}
   strict protected
     procedure Log(const msg: string; const params: array of const);
   protected
+    procedure AffinityChanged(const intSet: IOmniIntegerSet);
+    function  GetAffinity: IOmniIntegerSet;
     function  GetIdleWorkerThreadTimeout_sec: integer;
     function  GetMaxExecuting: integer;
     function  GetMaxQueued: integer;
     function  GetMaxQueuedTime_sec: integer;
     function  GetMinWorkers: integer;
     function  GetName: string;
+  {$IFDEF OTL_NUMASupport}
+    function  GetNUMANodes: IOmniIntegerSet;
+    function  GetProcessorGroups: IOmniIntegerSet;
+  {$ENDIF OTL_NUMASupport}
     function  GetUniqueID: int64;
     function  GetWaitOnTerminate_sec: integer;
+    procedure NUMANodesChanged(const intSet: IOmniIntegerSet);
+    procedure ProcessorGroupsChanged(const intSet: IOmniIntegerSet);
     procedure SetIdleWorkerThreadTimeout_sec(value: integer);
     procedure SetMaxExecuting(value: integer);
     procedure SetMaxQueued(value: integer);
@@ -437,6 +460,7 @@ type
     function  SetMonitor(hWindow: THandle): IOmniThreadPool;
     procedure SetThreadDataFactory(const value: TOTPThreadDataFactoryMethod); overload;
     procedure SetThreadDataFactory(const value: TOTPThreadDataFactoryFunction); overload;
+    property Affinity: IOmniIntegerSet read GetAffinity;
     property IdleWorkerThreadTimeout_sec: integer
       read GetIdleWorkerThreadTimeout_sec write SetIdleWorkerThreadTimeout_sec;
     property MaxExecuting: integer read GetMaxExecuting write SetMaxExecuting;
@@ -448,6 +472,10 @@ type
     property UniqueID: int64 read GetUniqueID;
     property WaitOnTerminate_sec: integer read GetWaitOnTerminate_sec write
       SetWaitOnTerminate_sec;
+  {$IFDEF OTL_NUMASupport}
+    property ProcessorGroups: IOmniIntegerSet read GetProcessorGroups;
+    property NUMANodes: IOmniIntegerSet read GetNUMANodes;
+  {$ENDIF OTL_NUMASupport}
   end; { TOmniThreadPool }
 
 const
@@ -1355,6 +1383,14 @@ begin
   otpWorkerTask := CreateTask
     (otpWorker, Format('OmniThreadPool manager %s', [name])).Run;
   otpWorkerTask.WaitForInit;
+  otpAffinity := TOmniIntegerSet.Create;
+  otpAffinity.OnChange := AffinityChanged;
+  {$IFDEF OTL_NUMASupport}
+  otpNUMANodes := TOmniIntegerSet.Create;
+  otpNUMANodes.OnChange := NUMANodesChanged;
+  otpProcessorGroups := TOmniIntegerSet.Create;
+  otpProcessorGroups.OnChange := ProcessorGroupsChanged;
+  {$ENDIF OTL_NUMASupport}
 end; { TOmniThreadPool.Create }
 
 destructor TOmniThreadPool.Destroy;
@@ -1363,6 +1399,11 @@ begin
   otpWorkerTask.Terminate;
   inherited;
 end; { TOmniThreadPool.Destroy }
+
+procedure TOmniThreadPool.AffinityChanged(const intSet: IOmniIntegerSet);
+begin
+  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.AffinityChanged
+end; { TOmniThreadPool.AffinityChanged }
 
 /// <returns>True: Normal exit, False: Thread was killed.</returns>
 {$WARN NO_RETVAL OFF}
@@ -1404,6 +1445,11 @@ begin
   finally WorkerObj.CountQueuedLock.Release; end;
 end; { TOmniThreadPool.CountQueued }
 
+function TOmniThreadPool.GetAffinity: IOmniIntegerSet;
+begin
+  Result := otpAffinity;
+end; { TOmniThreadPool.GetAffinity }
+
 function TOmniThreadPool.GetIdleWorkerThreadTimeout_sec: integer;
 begin
   Result := WorkerObj.IdleWorkerThreadTimeout_sec.Value;
@@ -1433,6 +1479,18 @@ function TOmniThreadPool.GetName: string;
 begin
   Result := otpPoolName;
 end; { TOmniThreadPool.GetName }
+
+{$IFDEF OTL_NUMASupport}
+function TOmniThreadPool.GetNUMANodes: IOmniIntegerSet;
+begin
+  Result := otpNUMANodes;
+end; { TOmniThreadPool.GetNUMANodes }
+
+function TOmniThreadPool.GetProcessorGroups: IOmniIntegerSet;
+begin
+  Result := otpProcessorGroups;
+end; { TOmniThreadPool.GetProcessorGroups }
+{$ENDIF OTL_NUMASupport}
 
 function TOmniThreadPool.GetUniqueID: int64;
 begin
@@ -1469,6 +1527,16 @@ begin
   {$ENDIF MSWINDOWS}
   Result := Self;
 end; { TOmniThreadPool.MonitorWith }
+
+procedure TOmniThreadPool.NUMANodesChanged(const intSet: IOmniIntegerSet);
+begin
+  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.NUMANodesChanged
+end; { TOmniThreadPool.NUMANodesChanged }
+
+procedure TOmniThreadPool.ProcessorGroupsChanged(const intSet: IOmniIntegerSet);
+begin
+  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.ProcessorGroupsChanged
+end; { TOmniThreadPool.ProcessorGroupsChanged }
 
 function TOmniThreadPool.RemoveMonitor: IOmniThreadPool;
 begin
