@@ -4653,6 +4653,7 @@ begin
     {$ENDIF}
       pointer(syncMask) := nil;
   end;
+  Result := FAffinity;
 end; { TOmniGroupAffinity.GetAffinity }
 
 initialization
