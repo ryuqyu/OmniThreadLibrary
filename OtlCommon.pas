@@ -698,6 +698,7 @@ type
   {$ENDIF OTL_Generics}
   //
     function  Add(value: integer): boolean;
+    procedure Assign(const value: IOmniIntegerSet);
     function  Count: integer;
     function  Remove(value: integer): boolean;
   {$IFDEF OTL_Generics}
@@ -717,7 +718,6 @@ type
     FOnChange    : TOmniIntegerSetChangedEvent;
     FValueCopy   : TIntegerDynArray;
   strict protected
-    function  Add(value: integer): boolean;
     procedure DoOnChange;
     function  GetAsBits: TBits;
     function  GetAsIntArray: TIntegerDynArray;
@@ -725,7 +725,6 @@ type
     function  GetItem(idx: integer): integer;
     function  GetOnChange: TOmniIntegerSetChangedEvent;
     procedure PrepareValueCopy;
-    function  Remove(value: integer): boolean;
     procedure SetAsBits(const value: TBits);
     procedure SetAsIntArray(const value: TIntegerDynArray);
     procedure SetAsMask(const value: int64);
@@ -737,7 +736,11 @@ type
   public
     constructor Create;
     destructor  Destroy; override;
+    function  Add(value: integer): boolean;
+    procedure Assign(const value: IOmniIntegerSet); overload;
+    procedure Assign(const value: TOmniIntegerSet); overload;
     function  Count: integer;
+    function  Remove(value: integer): boolean;
   {$IFDEF OTL_Generics}
     property AsArray: TArray<integer> read GetAsArray write SetAsArray;
   {$ENDIF OTL_Generics}
@@ -4462,6 +4465,23 @@ begin
   FBits[value] := true;
   DoOnChange;
 end; { TOmniIntegerSet.Add }
+
+procedure TOmniIntegerSet.Assign(const value: IOmniIntegerSet);
+var
+  i      : integer;
+  valBits: TBits;
+begin
+  valBits := value.AsBits;
+  FBits.Size := valBits.Size;
+  for i := 0 to FBits.Size - 1 do
+    FBits[i] := valBits[i];
+  DoOnChange;
+end; { TOmniIntegerSet.Assign }
+
+procedure TOmniIntegerSet.Assign(const value: TOmniIntegerSet);
+begin
+  Assign(value as IOmniIntegerSet);
+end; { TOmniIntegerSet.Assign }
 
 function TOmniIntegerSet.Count: integer;
 begin

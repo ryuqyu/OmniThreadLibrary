@@ -52,6 +52,7 @@ type
     procedure TestAsMask;
     procedure TestValues;
     procedure TestAddRemove;
+    procedure TestAssign;
   end;
 
 implementation
@@ -330,6 +331,16 @@ begin
   CheckEquals(7, arr[1]);
   FIntegerSet.AsArray := [6,3];
   CheckEquals($48, FIntegerSet.AsMask);
+end;
+
+procedure TestIOmniIntegerSet.TestAssign;
+var
+  value: IOmniIntegerSet;
+begin
+  value := TOmniIntegerSet.Create;
+  value.AsArray := [1,2];
+  FIntegerSet.Assign(value);
+  CheckEquals(6, FIntegerSet.AsMask);
 end;
 
 procedure TestIOmniIntegerSet.TestValues;
