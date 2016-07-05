@@ -12,11 +12,19 @@ const
 
 type
   TfrmProcessorGroupsNUMA = class(TForm)
-    lbLog: TListBox;
-    btnStartProcGroup: TButton;
-    inpProcGroup: TSpinEdit;
+    btnScheduleTask   : TButton;
     btnStartInNumaNode: TButton;
-    inpNUMANode: TSpinEdit;
+    btnStartProcGroup : TButton;
+    inpAffinity       : TEdit;
+    inpNUMANode       : TSpinEdit;
+    inpNUMANodes      : TEdit;
+    inpProcessorGroups: TEdit;
+    inpProcGroup      : TSpinEdit;
+    Label1            : TLabel;
+    lblAffinity       : TLabel;
+    lbLog             : TListBox;
+    lblProcessorGroups: TLabel;
+    procedure btnScheduleTaskClick(Sender: TObject);
     procedure btnStartInNumaNodeClick(Sender: TObject);
     procedure btnStartProcGroupClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -24,6 +32,7 @@ type
     procedure DisplayInfo;
     procedure Log(const msg: string); overload;
     procedure Log(const msg: string; const params: array of const); overload;
+    function  MapToIntegerArray(const s: string): TArray<integer>;
     procedure WMMsgLog(var msg: TOmniMessage); message MSG_LOG;
   public
   end;
@@ -44,16 +53,37 @@ uses
 
 procedure TestWorker(const task: IOmniTask);
 var
-  groupAffinity: TGroupAffinity;
+  groupAffinity: TOmniGroupAffinity;
 begin
-  if DSiGetThreadGroupAffinity(GetCurrentThread, groupAffinity) then
-    task.Comm.Send(MSG_LOG, Format('Thread affinity: group %d, mask %.16x',
-      [groupAffinity.Group, groupAffinity.Mask]))
-  else
-    task.Comm.Send(MSG_LOG, 'Cannot read thread group affinity');
+  groupAffinity := Environment.Thread.GroupAffinity;
+  task.Comm.Send(MSG_LOG, Format('Thread affinity: group %d, mask %.16x',
+    [groupAffinity.Group, groupAffinity.Affinity.AsMask]));
 end;
 
 { TfrmProcessorGroupsNUMA }
+
+procedure TfrmProcessorGroupsNUMA.btnScheduleTaskClick(Sender: TObject);
+var
+  c   : integer;
+  mask: cardinal;
+begin
+  if inpAffinity.Text <> '' then begin
+    Val('$' + inpAffinity.Text, mask, c);
+    if c <> 0 then
+      raise Exception.Create('Invalid value: ' + inpAffinity.Text);
+    GlobalOmniThreadPool.Affinity.AsMask := mask;
+  end;
+
+  if inpProcessorGroups.Text <> '' then
+    GlobalOmniThreadPool.ProcessorGroups.AsArray := MapToIntegerArray(inpProcessorGroups.Text);
+
+  if inpNUMANodes.Text <> '' then
+    GlobalOmniThreadPool.NUMANodes.AsArray := MapToIntegerArray(inpNUMANodes.Text);
+
+  CreateTask(TestWorker, 'Scheduled task')
+    .OnMessage(Self)
+    .Schedule;
+end;
 
 procedure TfrmProcessorGroupsNUMA.btnStartInNumaNodeClick(Sender: TObject);
 begin
@@ -106,6 +136,17 @@ end;
 procedure TfrmProcessorGroupsNUMA.Log(const msg: string; const params: array of const);
 begin
   Log(Format(msg, params));
+end;
+
+function TfrmProcessorGroupsNUMA.MapToIntegerArray(const s: string): TArray<integer>;
+var
+  arr: TArray<string>;
+  i  : integer;
+begin
+  arr := s.Split([',']);
+  SetLength(Result, Length(arr));
+  for i := Low(Result) to High(Result) do
+    Result[i] := StrToInt(arr[i]);
 end;
 
 procedure TfrmProcessorGroupsNUMA.WMMsgLog(var msg: TOmniMessage);

@@ -341,12 +341,15 @@ type
 
   TOTPWorker = class(TOmniWorker)
   strict private
+    owAffinity         : IOmniIntegerSet;
     owDestroying       : boolean;
     owIdleWorkers      : TObjectList;
     {$IFDEF MSWINDOWS}
     owMonitorObserver  : TOmniContainerWindowsMessageObserver;
     {$ENDIF MSWINDOWS}
     owName             : string;
+    owNUMANodes        : IOmniIntegerSet;
+    owProcessorGroups  : IOmniIntegerSet;
     owRunningWorkers   : TObjectList;
     owStoppingWorkers  : TObjectList;
     owThreadDataFactory: TOTPThreadDataFactory;
@@ -393,7 +396,10 @@ type
     procedure PruneWorkingQueue;
     procedure RemoveMonitor;
     procedure Schedule(var workItem: TOTPWorkItem);
+    procedure SetAffinity(const value: TOmniValue);
     procedure SetMonitor(const params: TOmniValue);
+    procedure SetNUMANodes(const value: TOmniValue);
+    procedure SetProcessorGroups(const value: TOmniValue);
     procedure SetName(const name: TOmniValue);
     procedure SetThreadDataFactory(const threadDataFactory: TOmniValue);
   end; { TOTPWorker }
@@ -422,7 +428,6 @@ type
   strict protected
     procedure Log(const msg: string; const params: array of const);
   protected
-    procedure AffinityChanged(const intSet: IOmniIntegerSet);
     function  GetAffinity: IOmniIntegerSet;
     function  GetIdleWorkerThreadTimeout_sec: integer;
     function  GetMaxExecuting: integer;
@@ -436,8 +441,12 @@ type
   {$ENDIF OTL_NUMASupport}
     function  GetUniqueID: int64;
     function  GetWaitOnTerminate_sec: integer;
-    procedure NUMANodesChanged(const intSet: IOmniIntegerSet);
-    procedure ProcessorGroupsChanged(const intSet: IOmniIntegerSet);
+    function MakeIntegerSetCopy(const value: IOmniIntegerSet): TOmniValue;
+    procedure NotifyAffinityChanged(const value: IOmniIntegerSet);
+  {$IFDEF OTL_NUMASupport}
+    procedure NotifyNUMANodesChanged(const value: IOmniIntegerSet);
+    procedure NotifyProcessorGroupsChanged(const value: IOmniIntegerSet);
+  {$ENDIF OTL_NUMASupport}
     procedure SetIdleWorkerThreadTimeout_sec(value: integer);
     procedure SetMaxExecuting(value: integer);
     procedure SetMaxQueued(value: integer);
@@ -932,6 +941,9 @@ end; { TOTPWorker.ForwardThreadDestroying }
 
 function TOTPWorker.Initialize: boolean;
 begin
+  owAffinity := TOmniIntegerSet.Create;
+  owNUMANodes := TOmniIntegerSet.Create;
+  owProcessorGroups := TOmniIntegerSet.Create;
   owIdleWorkers := TObjectList.Create(false);
   owRunningWorkers := TObjectList.Create(false);
   CountRunning.Value := 0;
@@ -1295,6 +1307,7 @@ begin
     {$IFDEF LogThreadPool}Log('Started %s', [workItem.Description]);{$ENDIF LogThreadPool}
     workItem.StartedAt := Now;
     workItem.Thread := worker;
+    // TODO : Set thread affinity
     // worker.WorkItem_ref := workItem; 
     worker.OwnerCommEndpoint.Send(MSG_RUN, workItem);
   end
@@ -1306,6 +1319,11 @@ begin
       PruneWorkingQueue;
   end;
 end; { TOTPWorker.ScheduleNext }
+
+procedure TOTPWorker.SetAffinity(const value: TOmniValue);
+begin
+  owAffinity.Assign(value.AsInterface as IOmniIntegerSet);
+end; { TOTPWorker.SetAffinity }
 
 procedure TOTPWorker.SetMonitor(const params: TOmniValue);
 var
@@ -1332,6 +1350,16 @@ procedure TOTPWorker.SetName(const name: TOmniValue);
 begin
   owName := name;
 end; { TOTPWorker.SetName }
+
+procedure TOTPWorker.SetNUMANodes(const value: TOmniValue);
+begin
+  owNUMANodes.Assign(value.AsInterface as IOmniIntegerSet);
+end; { TOTPWorker.SetNUMANodes }
+
+procedure TOTPWorker.SetProcessorGroups(const value: TOmniValue);
+begin
+  owProcessorGroups.Assign(value.AsInterface as IOmniIntegerSet);
+end; { TOTPWorker.SetProcessorGroups }
 
 procedure TOTPWorker.SetThreadDataFactory(const threadDataFactory: TOmniValue);
 var
@@ -1384,12 +1412,12 @@ begin
     (otpWorker, Format('OmniThreadPool manager %s', [name])).Run;
   otpWorkerTask.WaitForInit;
   otpAffinity := TOmniIntegerSet.Create;
-  otpAffinity.OnChange := AffinityChanged;
+  otpAffinity.OnChange := NotifyAffinityChanged;
   {$IFDEF OTL_NUMASupport}
   otpNUMANodes := TOmniIntegerSet.Create;
-  otpNUMANodes.OnChange := NUMANodesChanged;
+  otpNUMANodes.OnChange := NotifyNUMANodesChanged;
   otpProcessorGroups := TOmniIntegerSet.Create;
-  otpProcessorGroups.OnChange := ProcessorGroupsChanged;
+  otpProcessorGroups.OnChange := NotifyProcessorGroupsChanged;
   {$ENDIF OTL_NUMASupport}
 end; { TOmniThreadPool.Create }
 
@@ -1399,11 +1427,6 @@ begin
   otpWorkerTask.Terminate;
   inherited;
 end; { TOmniThreadPool.Destroy }
-
-procedure TOmniThreadPool.AffinityChanged(const intSet: IOmniIntegerSet);
-begin
-  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.AffinityChanged
-end; { TOmniThreadPool.AffinityChanged }
 
 /// <returns>True: Normal exit, False: Thread was killed.</returns>
 {$WARN NO_RETVAL OFF}
@@ -1519,6 +1542,15 @@ begin
   {$ENDIF LogThreadPool}
 end; { TGpThreadPool.Log }
 
+function TOmniThreadPool.MakeIntegerSetCopy(const value: IOmniIntegerSet): TOmniValue;
+var
+  copy: IOmniIntegerSet;
+begin
+  copy := TOmniIntegerSet.Create;
+  copy.Assign(value);
+  Result.AsInterface := copy;
+end; { TOmniThreadPool.MakeIntegerSetCopy }
+
 function TOmniThreadPool.MonitorWith(const monitor: IOmniThreadPoolMonitor):
   IOmniThreadPool;
 begin
@@ -1528,15 +1560,22 @@ begin
   Result := Self;
 end; { TOmniThreadPool.MonitorWith }
 
-procedure TOmniThreadPool.NUMANodesChanged(const intSet: IOmniIntegerSet);
+procedure TOmniThreadPool.NotifyAffinityChanged(const value: IOmniIntegerSet);
 begin
-  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.NUMANodesChanged
-end; { TOmniThreadPool.NUMANodesChanged }
+  otpWorkerTask.Invoke(@TOTPWorker.SetAffinity, MakeIntegerSetCopy(value));
+end; { TOmniThreadPool.NotifyAffinityChanged }
 
-procedure TOmniThreadPool.ProcessorGroupsChanged(const intSet: IOmniIntegerSet);
+{$IFDEF OTL_NUMASupport}
+procedure TOmniThreadPool.NotifyNUMANodesChanged(const value: IOmniIntegerSet);
 begin
-  // TODO 1 -oPrimoz Gabrijelcic : implement: TOmniThreadPool.ProcessorGroupsChanged
-end; { TOmniThreadPool.ProcessorGroupsChanged }
+  otpWorkerTask.Invoke(@TOTPWorker.SetNUMANodes, MakeIntegerSetCopy(value));
+end; { TOmniThreadPool.NotifyNUMANodesChanged }
+
+procedure TOmniThreadPool.NotifyProcessorGroupsChanged(const value: IOmniIntegerSet);
+begin
+  otpWorkerTask.Invoke(@TOTPWorker.SetProcessorGroups, MakeIntegerSetCopy(value));
+end; { TOmniThreadPool.NotifyProcessorGroupsChanged }
+{$ENDIF OTL_NUMASupport}
 
 function TOmniThreadPool.RemoveMonitor: IOmniThreadPool;
 begin
