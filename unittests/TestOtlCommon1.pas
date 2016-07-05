@@ -318,6 +318,11 @@ procedure TestIOmniIntegerSet.TestAsMask;
 var
   arr: TArray<integer>;
 begin
+  FIntegerSet.AsArray := [0];
+  CheckEquals(1, FIntegerSet.AsMask);
+  FIntegerSet.AsMask := 1;
+  CheckEquals(true, FIntegerSet.AsBits[0]);
+
   FIntegerSet.AsMask := $84;
   arr := FIntegerSet.AsArray;
   CheckEquals(2, Length(arr));
