@@ -699,6 +699,7 @@ type
   //
     function  Add(value: integer): boolean;
     procedure Assign(const value: IOmniIntegerSet);
+    function  Contains(value: integer): boolean;
     function  Count: integer;
     function  IsEmpty: boolean;
     function  Remove(value: integer): boolean;
@@ -720,26 +721,28 @@ type
     FValueCopy   : TIntegerDynArray;
   strict protected
     procedure DoOnChange;
-    function  GetAsBits: TBits;
+    function  GetAsBits: TBits; inline;
     function  GetAsIntArray: TIntegerDynArray;
     function  GetAsMask: int64;
     function  GetItem(idx: integer): integer;
-    function  GetOnChange: TOmniIntegerSetChangedEvent;
+    function  GetOnChange: TOmniIntegerSetChangedEvent; inline;
     procedure PrepareValueCopy;
     procedure SetAsBits(const value: TBits);
     procedure SetAsIntArray(const value: TIntegerDynArray);
     procedure SetAsMask(const value: int64);
-    procedure SetOnChange(const value: TOmniIntegerSetChangedEvent);
+    procedure SetOnChange(const value: TOmniIntegerSetChangedEvent); inline;
   {$IFDEF OTL_Generics}
     function  GetAsArray: TArray<integer>;
     procedure SetAsArray(const value: TArray<integer>);
   {$ENDIF OTL_Generics}
   public
     constructor Create;
+    constructor Clone(const value: IOmniIntegerSet);
     destructor  Destroy; override;
     function  Add(value: integer): boolean;
     procedure Assign(const value: IOmniIntegerSet); overload;
     procedure Assign(const value: TOmniIntegerSet); overload;
+    function  Contains(value: integer): boolean; inline;
     function  Count: integer;
     function  IsEmpty: boolean;
     function  Remove(value: integer): boolean;
@@ -819,6 +822,7 @@ type
     FGroup   : integer;
     function GetAffinity: IOmniIntegerSet;
   public
+    constructor Create(groupNumber: integer; const affinityMask: IOmniIntegerSet);
     property Group: integer read FGroup write FGroup;
     property Affinity: IOmniIntegerSet read GetAffinity;
   end; { TOmniGroupAffinity }
@@ -4549,6 +4553,12 @@ end; { TOmniAlignedInt64.Subtract }
 
 { TOmniIntegerSet }
 
+constructor TOmniIntegerSet.Clone(const value: IOmniIntegerSet);
+begin
+  Create;
+  Assign(value);
+end; { TOmniIntegerSet.Clone }
+
 constructor TOmniIntegerSet.Create;
 begin
   inherited Create;
@@ -4586,6 +4596,11 @@ procedure TOmniIntegerSet.Assign(const value: TOmniIntegerSet);
 begin
   Assign(value as IOmniIntegerSet);
 end; { TOmniIntegerSet.Assign }
+
+function TOmniIntegerSet.Contains(value: integer): boolean;
+begin
+  Result := FBits[value];
+end; { TOmniIntegerSet.Contains }
 
 function TOmniIntegerSet.Count: integer;
 begin
@@ -4773,6 +4788,13 @@ begin
 end; { TOmniIntegerSet.SetOnChange }
 
 { TOmniGroupAffinity }
+
+constructor TOmniGroupAffinity.Create(groupNumber: integer; const affinityMask:
+  IOmniIntegerSet);
+begin
+  Group := groupNumber;
+  Affinity.Assign(affinityMask);
+end; { TOmniGroupAffinity.Create }
 
 function TOmniGroupAffinity.GetAffinity: IOmniIntegerSet;
 var
