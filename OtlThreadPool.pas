@@ -268,22 +268,28 @@ type
 
   TOTPWorkItem = class
   strict private
-    owiScheduled_ms: int64;
-    owiScheduledAt : TDateTime;
-    owiStartedAt   : TDateTime;
-    owiTask        : IOmniTask;
-    owiThread      : TOTPWorkerThread;
-    owiUniqueID    : int64;
+    owiAffinity       : IOmniIntegerSet;
+    owiNUMANodes      : IOmniIntegerSet;
+    owiProcessorGroups: IOmniIntegerSet;
+    owiScheduled_ms   : int64;
+    owiScheduledAt    : TDateTime;
+    owiStartedAt      : TDateTime;
+    owiTask           : IOmniTask;
+    owiThread         : TOTPWorkerThread;
+    owiUniqueID       : int64;
   public
     constructor Create(const task: IOmniTask);
     function  Description: string;
     procedure TerminateTask(exitCode: integer; const exitMessage: string);
-    property ScheduledAt: TDateTime read owiScheduledAt;
+    property Affinity: IOmniIntegerSet read owiAffinity;
+    property NUMANodes: IOmniIntegerSet read owiNUMANodes;
+    property ProcessorGroups: IOmniIntegerSet read owiProcessorGroups;
     property Scheduled_ms: int64 read owiScheduled_ms;
+    property ScheduledAt: TDateTime read owiScheduledAt;
     property StartedAt: TDateTime read owiStartedAt write owiStartedAt;
-    property UniqueID: int64 read owiUniqueID;
     property Task: IOmniTask read owiTask;
     property Thread: TOTPWorkerThread read owiThread write owiThread;
+    property UniqueID: int64 read owiUniqueID;
   end; { TOTPWorkItem }
 
   TOTPThreadDataFactory = record
@@ -314,6 +320,7 @@ type
     procedure ExecuteWorkItem(workItem: TOTPWorkItem);
     function  GetOwnerCommEndpoint: IOmniCommunicationEndpoint;
     procedure Log(const msg: string; const params: array of const);
+    procedure SetThreadAffinity(workItem: TOTPWorkItem);
   public
     constructor Create(const ThreadDataFactory: TOTPThreadDataFactory);
     destructor  Destroy; override;
@@ -561,6 +568,9 @@ begin
   owiScheduledAt := Now;
   owiScheduled_ms := {$IFDEF MSWINDOWS} DSiTimeGetTime64 {$ELSE} TStopWatch.GetTimeStamp {$ENDIF};
   owiUniqueID := owiTask.UniqueID;
+  owiAffinity := TOmniIntegerSet.Create;
+  owiNUMANodes := TOmniIntegerSet.Create;
+  owiProcessorGroups := TOmniIntegerSet.Create;
 end; { TOTPWorkItem.Create }
 
 function TOTPWorkItem.Description: string;
@@ -715,6 +725,7 @@ begin
   WorkItem_ref := workItem;
   task := WorkItem_ref.task;
   try
+    SetThreadAffinity(workItem);
     {$IFDEF LogThreadPool}Log('Thread %s starting execution of %s', [Description, WorkItem_ref.Description]);
     DSiGetThreadTimes(creationTime, startUserTime, startKernelTime); {$ENDIF LogThreadPool}
     if assigned(task) then
@@ -779,6 +790,14 @@ begin
   OutputDebugString(PChar(Format(msg, params)));
   {$ENDIF LogThreadPool}
 end; { TOTPWorkerThread.Log }
+
+procedure TOTPWorkerThread.SetThreadAffinity(workItem: TOTPWorkItem);
+begin
+  if not workItem.Affinity.IsEmpty then
+    Environment.Thread.Affinity.Mask := workItem.Affinity.AsMask;
+//  if not workItem.NUMANodes.IsEmpty then
+//    Environment.Thread.GroupAffinity := TOmniGroupAffinity.Create(
+end; { TOTPWorkerThread.SetThreadAffinity }
 
 procedure TOTPWorkerThread.Start;
 begin
@@ -1307,8 +1326,9 @@ begin
     {$IFDEF LogThreadPool}Log('Started %s', [workItem.Description]);{$ENDIF LogThreadPool}
     workItem.StartedAt := Now;
     workItem.Thread := worker;
-    // TODO : Set thread affinity
-    // worker.WorkItem_ref := workItem; 
+    workItem.Affinity.Assign(owAffinity);
+    workItem.NUMANodes.Assign(owNUMANodes);
+    workItem.ProcessorGroups.Assign(owProcessorGroups);
     worker.OwnerCommEndpoint.Send(MSG_RUN, workItem);
   end
   else begin
