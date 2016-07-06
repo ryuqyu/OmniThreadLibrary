@@ -2682,7 +2682,7 @@ begin
   {$IFDEF MSWindows}
   FillChar(groupAffinity, SizeOf(groupAffinity), 0);
   groupAffinity.Group := node.GroupNumber;
-  groupAffinity.Mask := node.Affinity;
+  groupAffinity.Mask := node.Affinity.AsMask;
   DSiSetThreadGroupAffinity(GetCurrentThread, groupAffinity, nil);
   {$ENDIF MSWindows}
   {$ENDIF OTL_Generics}
@@ -2701,7 +2701,7 @@ begin
   {$IFDEF MSWindows}
   FillChar(groupAffinity, SizeOf(groupAffinity), 0);
   groupAffinity.Group := procGroupNumber;
-  groupAffinity.Mask := Environment.ProcessorGroups[procGroupNumber].Affinity;
+  groupAffinity.Mask := Environment.ProcessorGroups[procGroupNumber].Affinity.AsMask;
   DSiSetThreadGroupAffinity(GetCurrentThread, groupAffinity, nil);
   {$ENDIF MSWindows}
   {$ENDIF OTL_Generics}
@@ -2788,7 +2788,7 @@ end; { TOmniTaskExecutor.VerifyNUMANode }
 
 class procedure TOmniTaskExecutor.VerifyProcessorGroup(procGroupNumber: integer);
 var
-  procGroups: TList<IOmniProcessorGroup>;
+  procGroups: IOmniProcessorGroups;
 begin
   procGroups := Environment.ProcessorGroups;
   if (procGroupNumber < 0) or (procGroupNumber >= procGroups.Count) then

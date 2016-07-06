@@ -836,18 +836,19 @@ type
 
   {$IFDEF OTL_NUMASupport}
   IOmniNUMANode = interface ['{8D3B415F-8B13-4BFF-B7C7-2D0BC1705217}']
-    function  GetAffinity: NativeUInt;
+    function  GetAffinity: IOmniIntegerSet;
     function  GetGroupNumber: integer;
     function  GetNodeNumber: integer;
   //
     property NodeNumber: integer read GetNodeNumber;
     property GroupNumber: integer read GetGroupNumber;
-    property Affinity: NativeUInt read GetAffinity;
+    property Affinity: IOmniIntegerSet read GetAffinity;
   end; { IOmniNUMANode }
 
   IOmniNUMANodes = interface ['{4407E795-ED35-4DD1-9EC6-D59758BAF581}']
-    function GetItem(idx: integer): IOmniNUMANode;
+    function  GetItem(idx: integer): IOmniNUMANode;
   //
+    function  All: IOmniIntegerSet;
     function  Count: integer;
     function  FindNode(nodeNumber: integer): IOmniNUMANode;
     function  GetEnumerator: TList<IOmniNUMANode>.TEnumerator;
@@ -855,18 +856,28 @@ type
   end; { IOmniNUMANodes }
 
   IOmniProcessorGroup = interface ['{BCFB0AE8-A378-4A4B-AD73-EF9B59218B55}']
-    function  GetAffinity: NativeUInt;
+    function  GetAffinity: IOmniIntegerSet;
     function  GetGroupNumber: integer;
     //
     property GroupNumber: integer read GetGroupNumber;
-    property Affinity: NativeUInt read GetAffinity;
+    property Affinity: IOmniIntegerSet read GetAffinity;
   end; { IOmniProcessorGroup }
+
+  IOmniProcessorGroups = interface ['{B4C871C0-CF61-4BC9-98DE-87F720F51853}']
+    function  GetItem(idx: integer): IOmniProcessorGroup;
+  //
+    function  All: IOmniIntegerSet;
+    function  Count: integer;
+    function  FindGroup(groupNumber: integer): IOmniProcessorGroup;
+    function  GetEnumerator: TList<IOmniProcessorGroup>.TEnumerator;
+    property Item[idx: integer]: IOmniProcessorGroup read GetItem; default;
+  end; { IOmniProcessorGroups }
   {$ENDIF OTL_NUMASupport}
 
   IOmniEnvironment = interface ['{4F9594E2-8B88-483C-9616-85B50493406D}']
   {$IFDEF OTL_NUMASupport}
     function  GetNUMANodes: IOmniNUMANodes;
-    function  GetProcessorGroups: TList<IOmniProcessorGroup>;
+    function  GetProcessorGroups: IOmniProcessorGroups;
   {$ENDIF OTL_NUMASupport}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
@@ -874,7 +885,7 @@ type
   //
   {$IFDEF OTL_NUMASupport}
     property NUMANodes: IOmniNUMANodes read GetNUMANodes;
-    property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
+    property ProcessorGroups: IOmniProcessorGroups read GetProcessorGroups;
   {$ENDIF OTL_NUMASupport}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
@@ -1284,16 +1295,16 @@ type
   {$IFDEF OTL_NUMASupport}
   TOmniNUMANode = class(TInterfacedObject, IOmniNUMANode)
   private
-    FAffinity   : NativeUInt;
+    FAffinity   : IOmniIntegerSet;
     FGroupNumber: integer;
     FNodeNumber : integer;
   protected
-    function GetAffinity: NativeUInt;
+    function GetAffinity: IOmniIntegerSet;
     function GetGroupNumber: integer;
     function GetNodeNumber: integer;
   public
     constructor Create(nodeNumber, groupNumber: integer; affinity: NativeUInt);
-    property Affinity: NativeUInt read GetAffinity;
+    property Affinity: IOmniIntegerSet read GetAffinity;
     property GroupNumber: integer read GetGroupNumber;
     property NodeNumber: integer read GetNodeNumber;
   end; { TOmniNUMANode }
@@ -1308,30 +1319,52 @@ type
   private
     FNodes: TList<IOmniNUMANode>;
   strict protected
-    function  GetItem(idx: integer): IOmniNUMANode;
+    function  GetItem(idx: integer): IOmniNUMANode; inline;
   public
     constructor Create;
     destructor  Destroy; override;
-    procedure Add(const node: IOmniNUMANode);
-    function  Count: integer;
+    procedure Add(const node: IOmniNUMANode); inline;
+    function  All: IOmniIntegerSet;
+    function  Count: integer; inline;
     function  FindNode(nodeNumber: integer): IOmniNUMANode;
-    function  GetEnumerator: TList<IOmniNUMANode>.TEnumerator;
+    function  GetEnumerator: TList<IOmniNUMANode>.TEnumerator; inline;
     procedure Sort;
     property Item[idx: integer]: IOmniNUMANode read GetItem; default;
   end; { TOmniNUMANode }
 
   TOmniProcessorGroup = class(TInterfacedObject, IOmniProcessorGroup)
   private
-    FAffinity   : NativeUInt;
+    FAffinity   : IOmniIntegerSet;
     FGroupNumber: integer;
   protected
-    function GetAffinity: NativeUInt;
+    function GetAffinity: IOmniIntegerSet;
     function GetGroupNumber: integer;
   public
     constructor Create(groupNumber: integer; affinity: NativeUInt);
-    property Affinity: NativeUInt read GetAffinity;
+    property Affinity: IOmniIntegerSet read GetAffinity;
     property GroupNumber: integer read GetGroupNumber;
   end; { TOmniProcessorGroup }
+
+  IOmniProcessorGroupsInternal = interface ['{E9A146BC-C1CF-4D2B-8764-2041AC24D424}']
+    procedure Add(const group: IOmniProcessorGroup);
+  end; { IOmniProcessorGroupsInternal }
+
+  TOmniProcessorGroups = class(TInterfacedObject, IOmniProcessorGroups,
+                                                  IOmniProcessorGroupsInternal)
+  private
+    FGroups: TList<IOmniProcessorGroup>;
+  strict protected
+    function  GetItem(idx: integer): IOmniProcessorGroup; inline;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Add(const group: IOmniProcessorGroup); inline;
+    function  All: IOmniIntegerSet;
+    function  Count: integer; inline;
+    function  FindGroup(groupNumber: integer): IOmniProcessorGroup; inline;
+    function  GetEnumerator: TList<IOmniProcessorGroup>.TEnumerator; inline;
+    property Item[idx: integer]: IOmniProcessorGroup read GetItem; default;
+  end; { IOmniProcessorGroups }
   {$ENDIF OTL_NUMASupport}
 
   TOmniEnvironment = class(TInterfacedObject, IOmniEnvironment)
@@ -1341,14 +1374,14 @@ type
     oeThreadEnv : IOmniThreadEnvironment;
   {$IFDEF OTL_NUMASupport}
     oeNUMANodes      : IOmniNUMANodes;
-    oeProcessorGroups: TList<IOmniProcessorGroup>;
+    oeProcessorGroups: IOmniProcessorGroups;
   strict protected
     procedure LoadNUMAInfo;
   {$ENDIF OTL_NUMASupport}
   protected
   {$IFDEF OTL_NUMASupport}
     function  GetNUMANodes: IOmniNUMANodes;
-    function  GetProcessorGroups: TList<IOmniProcessorGroup>;
+    function  GetProcessorGroups: IOmniProcessorGroups;
   {$ENDIF OTL_NUMASupport}
     function  GetProcess: IOmniProcessEnvironment;
     function  GetSystem: IOmniSystemEnvironment;
@@ -1358,7 +1391,7 @@ type
   {$IFDEF OTL_NUMASupport}
     destructor  Destroy; override;
     property NUMANodes: IOmniNUMANodes read GetNUMANodes;
-    property ProcessorGroups: TList<IOmniProcessorGroup> read GetProcessorGroups;
+    property ProcessorGroups: IOmniProcessorGroups read GetProcessorGroups;
   {$ENDIF OTL_NUMASupport}
     property Process: IOmniProcessEnvironment read GetProcess;
     property System: IOmniSystemEnvironment read GetSystem;
@@ -3827,12 +3860,13 @@ end; { TOmniThreadEnvironment.SetGroupAffinity }
 constructor TOmniNUMANode.Create(nodeNumber, groupNumber: integer; affinity: NativeUInt);
 begin
   inherited Create;
-  FAffinity := affinity;
+  FAffinity := TOmniIntegerSet.Create;
+  FAffinity.AsMask := affinity;
   FGroupNumber := groupNumber;
   FNodeNumber := nodeNumber;
 end; { TOmniNUMANode.Create }
 
-function TOmniNUMANode.GetAffinity: NativeUInt;
+function TOmniNUMANode.GetAffinity: IOmniIntegerSet;
 begin
   Result := FAffinity;
 end; { TOmniNUMANode.GetAffinity }
@@ -3865,6 +3899,18 @@ procedure TOmniNUMANodes.Add(const node: IOmniNUMANode);
 begin
   FNodes.Add(node);
 end; { TOmniNUMANodes.Add }
+
+function TOmniNUMANodes.All: IOmniIntegerSet;
+var
+  i    : integer;
+  nodes: TArray<integer>;
+begin
+  SetLength(nodes, Count);
+  for i := 0 to Count - 1 do
+    nodes[i] := Item[i].NodeNumber;
+  Result := TOmniIntegerSet.Create;
+  Result.AsArray := nodes;
+end; { TOmniNUMANodes.All }
 
 function TOmniNUMANodes.Count: integer;
 begin
@@ -3905,11 +3951,12 @@ end; { TOmniNUMANodes.Sort }
 constructor TOmniProcessorGroup.Create(groupNumber: integer; affinity: NativeUInt);
 begin
   inherited Create;
-  FAffinity := affinity;
+  FAffinity := TOmniIntegerSet.Create;
+  FAffinity.AsMask := affinity;
   FGroupNumber := groupNumber;
 end; { TOmniProcessorGroup.Create }
 
-function TOmniProcessorGroup.GetAffinity: NativeUInt;
+function TOmniProcessorGroup.GetAffinity: IOmniIntegerSet;
 begin
   Result := FAffinity;
 end; { TOmniProcessorGroup.GetAffinity }
@@ -3918,6 +3965,57 @@ function TOmniProcessorGroup.GetGroupNumber: integer;
 begin
   Result := FGroupNumber;
 end; { TOmniProcessorGroup.GetGroupNumber }
+
+{ TOmniProcessorGroups }
+
+constructor TOmniProcessorGroups.Create;
+begin
+  inherited Create;
+  FGroups := TList<IOmniProcessorGroup>.Create;
+end; { TOmniProcessorGroups.Create }
+
+destructor TOmniProcessorGroups.Destroy;
+begin
+  FreeAndNil(FGroups);
+  inherited;
+end; { TOmniProcessorGroups.Destroy }
+
+procedure TOmniProcessorGroups.Add(const group: IOmniProcessorGroup);
+begin
+  FGroups.Add(group);
+end; { TOmniProcessorGroups.Add }
+
+function TOmniProcessorGroups.All: IOmniIntegerSet;
+var
+  i    : integer;
+  nodes: TArray<integer>;
+begin
+  SetLength(nodes, Count);
+  for i := 0 to Count - 1 do
+    nodes[i] := Item[i].GroupNumber;
+  Result := TOmniIntegerSet.Create;
+  Result.AsArray := nodes;
+end; { TOmniProcessorGroups.All }
+
+function TOmniProcessorGroups.Count: integer;
+begin
+  Result := FGroups.Count;
+end; { TOmniProcessorGroups.Count }
+
+function TOmniProcessorGroups.FindGroup(groupNumber: integer): IOmniProcessorGroup;
+begin
+  Result := Item[groupNumber];
+end; { TOmniProcessorGroups.FindGroup }
+
+function TOmniProcessorGroups.GetEnumerator: TList<IOmniProcessorGroup>.TEnumerator;
+begin
+  Result := FGroups.GetEnumerator;
+end; { TOmniProcessorGroups.GetEnumerator }
+
+function TOmniProcessorGroups.GetItem(idx: integer): IOmniProcessorGroup;
+begin
+  Result := FGroups[idx];
+end; { TOmniProcessorGroups.GetItem }
 
 {$ENDIF OTL_NUMASupport}
 
@@ -3930,7 +4028,7 @@ begin
   oeSystemEnv := TOmniSystemEnvironment.Create;
 {$IFDEF OTL_NUMASupport}
   oeNUMANodes       := TOmniNUMANodes.Create;
-  oeProcessorGroups := TList<IOmniProcessorGroup>.Create;
+  oeProcessorGroups := TOmniProcessorGroups.Create;
   LoadNUMAInfo;
 {$ENDIF OTL_NUMASupport}
 end; { TOmniEnvironment.Create }
@@ -3939,7 +4037,7 @@ end; { TOmniEnvironment.Create }
 destructor TOmniEnvironment.Destroy;
 begin
   oeNUMANodes := nil;
-  FreeAndNil(oeProcessorGroups);
+  oeProcessorGroups := nil;
   inherited;
 end; { TOmniEnvironment.Destroy }
 
@@ -3948,7 +4046,7 @@ begin
   Result := oeNUMANodes;
 end; { TOmniEnvironment.GetNUMANodes }
 
-function TOmniEnvironment.GetProcessorGroups: TList<IOmniProcessorGroup>;
+function TOmniEnvironment.GetProcessorGroups: IOmniProcessorGroups;
 begin
   Result := oeProcessorGroups;
 end; { TOmniEnvironment.GetProcessorGroups }
@@ -3978,11 +4076,13 @@ var
   i          : integer;
   mask       : DWORD;
 {$ELSE}
-  bufLen     : DWORD;
-  currentInfo: PSystemLogicalProcessorInformationEx;
-  iGroup     : integer;
-  pGroupInfo : PProcessorGroupInfo;
-  procInfo   : PSystemLogicalProcessorInformationEx;
+  bufLen                 : DWORD;
+  currentInfo            : PSystemLogicalProcessorInformationEx;
+  iGroup                 : integer;
+  numaNodesInternal      : IOmniNUMANodesInternal;
+  pGroupInfo             : PProcessorGroupInfo;
+  processorGroupsInternal: IOmniProcessorGroupsInternal;
+  procInfo               : PSystemLogicalProcessorInformationEx;
 {$ENDIF}
 begin
   {$IFNDEF MSWindows}
@@ -4000,21 +4100,23 @@ begin
   try
     if not GetLogicalProcessorInformationEx(Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationAll, Windows.PSYSTEM_LOGICAL_PROCESSOR_INFORMATION(procInfo), bufLen) then
       raise Exception.CreateFmt('TOmniEnvironment.LoadNUMAInfo: GetLogicalProcessorInformation[2] failed with [%d] %s', [GetLastError, SysErrorMessage(GetLastError)]);
+    numaNodesInternal := (oeNUMANodes as IOmniNUMANodesInternal);
+    processorGroupsInternal := (oeProcessorGroups as IOmniProcessorGroupsInternal);
     currentInfo := procInfo;
     while (NativeUInt(currentInfo) - NativeUInt(procInfo)) < bufLen do begin
       if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationNumaNode then
-        (oeNUMANodes as IOmniNUMANodesInternal).Add(TOmniNUMANode.Create(currentInfo.NumaNode.NodeNumber,
+        numaNodesInternal.Add(TOmniNUMANode.Create(currentInfo.NumaNode.NodeNumber,
           currentInfo.NumaNode.GroupMask.Group, currentInfo.NumaNode.GroupMask.Mask))
       else if currentInfo.Relationship = Windows._LOGICAL_PROCESSOR_RELATIONSHIP.RelationGroup then begin
         pGroupInfo := @currentInfo.Group.GroupInfo;
         for iGroup := 0 to currentInfo.Group.ActiveGroupCount - 1 do begin
-          oeProcessorGroups.Add(TOmniProcessorGroup.Create(iGroup, pGroupInfo^.ActiveProcessorMask));
+          processorGroupsInternal.Add(TOmniProcessorGroup.Create(iGroup, pGroupInfo^.ActiveProcessorMask));
           Inc(pGroupInfo);
         end;
       end;
       currentInfo := PSystemLogicalProcessorInformationEx(NativeUInt(currentInfo) + currentInfo.Size);
     end;
-    (oeNUMANodes as IOmniNUMANodesInternal).Sort;
+    numaNodesInternal.Sort;
   finally FreeMem(procInfo); end;
   {$ENDIF MSWindows}
 end; { TOmniEnvironment.LoadNUMAInfo }

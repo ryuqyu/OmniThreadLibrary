@@ -111,7 +111,7 @@ begin
   for i := 0 to Environment.ProcessorGroups.Count - 1 do
     Log(Format('%d: Mask: %.16x', [
       Environment.ProcessorGroups[i].GroupNumber,
-      Environment.ProcessorGroups[i].Affinity]));
+      Environment.ProcessorGroups[i].Affinity.AsMask]));
   Log('');
 
   Log('NUMA nodes');
@@ -119,7 +119,7 @@ begin
     Log(Format('%d: Group: %d, Mask: %.16x', [
       Environment.NUMANodes[i].NodeNumber,
       Environment.NUMANodes[i].GroupNumber,
-      Environment.NUMANodes[i].Affinity]));
+      Environment.NUMANodes[i].Affinity.AsMask]));
 end;
 
 procedure TfrmProcessorGroupsNUMA.FormShow(Sender: TObject);
