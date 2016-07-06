@@ -700,6 +700,7 @@ type
     function  Add(value: integer): boolean;
     procedure Assign(const value: IOmniIntegerSet);
     function  Count: integer;
+    function  IsEmpty: boolean;
     function  Remove(value: integer): boolean;
   {$IFDEF OTL_Generics}
     property AsArray: TArray<integer> read GetAsArray write SetAsArray;
@@ -740,6 +741,7 @@ type
     procedure Assign(const value: IOmniIntegerSet); overload;
     procedure Assign(const value: TOmniIntegerSet); overload;
     function  Count: integer;
+    function  IsEmpty: boolean;
     function  Remove(value: integer): boolean;
   {$IFDEF OTL_Generics}
     property AsArray: TArray<integer> read GetAsArray write SetAsArray;
@@ -4564,6 +4566,16 @@ function TOmniIntegerSet.GetOnChange: TOmniIntegerSetChangedEvent;
 begin
   Result := FOnChange;
 end; { TOmniIntegerSet.GetOnChange }
+
+function TOmniIntegerSet.IsEmpty: boolean;
+var
+  i: integer;
+begin
+  Result := true;
+  for i := 0 to FBits.Size - 1 do
+    if FBits[i] then
+      Exit(false);
+end; { TOmniIntegerSet.IsEmpty }
 
 procedure TOmniIntegerSet.PrepareValueCopy;
 begin

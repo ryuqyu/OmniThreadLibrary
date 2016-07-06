@@ -53,6 +53,7 @@ type
     procedure TestValues;
     procedure TestAddRemove;
     procedure TestAssign;
+    procedure TestIsEmpty;
   end;
 
 implementation
@@ -341,6 +342,17 @@ begin
   value.AsArray := [1,2];
   FIntegerSet.Assign(value);
   CheckEquals(6, FIntegerSet.AsMask);
+end;
+
+procedure TestIOmniIntegerSet.TestIsEmpty;
+begin
+  CheckEquals(true, FIntegerSet.IsEmpty);
+  FIntegerSet.AsArray := [1];
+  CheckEquals(false, FIntegerSet.IsEmpty);
+  FIntegerSet.Remove(1);
+  CheckEquals(true, FIntegerSet.IsEmpty);
+  FIntegerSet.Add(2);
+  CheckEquals(false, FIntegerSet.IsEmpty);
 end;
 
 procedure TestIOmniIntegerSet.TestValues;
