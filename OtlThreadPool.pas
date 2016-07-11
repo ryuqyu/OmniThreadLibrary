@@ -119,6 +119,7 @@ uses
   {$ELSE}
   Diagnostics,
   {$ENDIF ~MSWINDOWS}
+  Contnrs,
   SysUtils,
   OtlCommon,
   OtlTask;
@@ -229,10 +230,10 @@ implementation
 uses
   {$IFDEF MSWINDOWS}
   Messages,
-  Contnrs,
   DSiWin32,
   GpStuff,
   {$ENDIF}
+  Math,
   SyncObjs,
   Classes,
   TypInfo,
@@ -348,21 +349,35 @@ type
 
   TOTPGroupAffinity = class
   private
-    FAffinity: int64;
-    FGroup   : integer;
+    FAffinity : int64;
+    FError    : integer;
+    FGroup    : integer;
+    FProcCount: integer;
   public
     constructor Create(group: integer; affinity: int64);
     property Affinity: int64 read FAffinity write FAffinity;
     property Group: integer read FGroup;
+    property ProcessorCount: integer read FProcCount;
+    property Error: integer read FError write FError;
   end; { TOTPGroupAffinity }
 
   TOTPWorkerScheduler = class
   strict private
-    owsClusters: TObjectList {of TOTPGroupAffinity};
+    owsClusters  : TObjectList {of TOTPGroupAffinity};
+    owsRoundRobin: TList {of integer};
+  strict protected
+    procedure ApplyAffinityMask(const affinity: IOmniIntegerSet);
+    procedure CreateInitialClusters(const processorGroups, numaNodes: IOmniIntegerSet);
+    procedure CreateRoundRobin;
+    function  FindHighestError: integer;
+    function  GetCluster(idx: integer): TOTPGroupAffinity; inline;
+    function  IsSame(value1, value2: TOTPGroupAffinity): boolean; inline;
+    procedure RemoveDuplicateClusters;
   public
     constructor Create;
     destructor  Destroy; override;
     procedure Update(affinity, processorGroups, numaNodes: IOmniIntegerSet);
+    property Cluster[idx: integer]: TOTPGroupAffinity read GetCluster;
   end; { TOTPWorkerScheduler }
 
   TOTPWorker = class(TOmniWorker)
@@ -996,6 +1011,7 @@ begin
   WaitOnTerminate_sec.Value := CDefaultWaitOnTerminate_sec;
   MaxExecuting.Value := Environment.Process.Affinity.Count;
   Task.SetTimer(1, 1000, @TOTPWorker.MaintainanceTimer);
+  UpdateScheduler;
   Result := true;
 end; { TOTPWorker.Initialize }
 
@@ -1715,10 +1731,15 @@ end; { TOmniThreadPool.WorkerObj }
 { TOTPGroupAffinity }
 
 constructor TOTPGroupAffinity.Create(group: integer; affinity: int64);
+var
+  affSet: IOmniIntegerSet;
 begin
   inherited Create;
   FGroup := group;
   FAffinity := affinity;
+  affSet := TOmniIntegerSet.Create;
+  affSet.AsMask := affinity;
+  FProcCount := affSet.Count;
 end; { TOTPGroupAffinity.Create }
 
 { TOTPWorkerScheduler }
@@ -1727,26 +1748,48 @@ constructor TOTPWorkerScheduler.Create;
 begin
   inherited Create;
   owsClusters := TObjectList.Create;
+  owsRoundRobin := TList.Create;
 end; { TOTPWorkerScheduler.Create }
 
 destructor TOTPWorkerScheduler.Destroy;
 begin
+  FreeAndNil(owsRoundRobin);
   FreeAndNil(owsClusters);
   inherited;
 end; { TOTPWorkerScheduler.Destroy }
 
-procedure TOTPWorkerScheduler.Update(affinity, processorGroups, numaNodes: IOmniIntegerSet);
-{$IFDEF OTL_NUMASupport}
+function CompareGroupAffinity(item1, item2: pointer): integer;
+var
+  aff1: TOTPGroupAffinity absolute item1;
+  aff2: TOTPGroupAffinity absolute item2;
+begin
+  Result := CompareValue(aff1.Group, aff2.Group);
+  if Result = 0 then
+    Result := CompareValue(aff1.Affinity, aff2.Affinity);
+end; { CompareGroupAffinity }
+
+procedure TOTPWorkerScheduler.ApplyAffinityMask(const affinity: IOmniIntegerSet);
 var
   affinityMask: int64;
+  i           : integer;
+begin
+  if affinity.Count > 0 then begin
+    affinityMask := affinity.AsMask;
+    for i := 0 to owsClusters.Count - 1 do
+      Cluster[i].Affinity := Cluster[i].Affinity AND affinityMask;
+  end;
+end; { TOTPWorkerScheduler.ApplyAffinityMask }
+
+procedure TOTPWorkerScheduler.CreateInitialClusters(const processorGroups, numaNodes:
+  IOmniIntegerSet);
+{$IFDEF OTL_NUMASupport}
+var
   envGroups   : IOmniProcessorGroups;
   envNodes    : IOmniNUMANodes;
   i           : integer;
   nodeInfo    : IOmniNUMANode;
 {$ENDIF OTL_NUMASupport}
 begin
-  owsClusters.Clear;
-
   {$IFDEF OTL_NUMASupport}
   envGroups := Environment.ProcessorGroups;
   envNodes := Environment.NUMANodes;
@@ -1768,15 +1811,76 @@ begin
   {$ELSE}
   owsClusters.Add(TOTPGroupAffinity.Create(0, Environment.Process.Affinity.Mask));
   {$ENDIF OTL_NUMASupport}
+end; { TOTPWorkerScheduler.CreateInitialClusters }
 
-  if affinity.Count > 0 then begin
-    affinityMask := affinity.AsMask;
-    for i := 0 to owsClusters.Count - 1 do
-      TOTPGroupAffinity(owsClusters[i]).Affinity := TOTPGroupAffinity(owsClusters[i]).Affinity AND affinityMask;
+procedure TOTPWorkerScheduler.CreateRoundRobin;
+var
+  i         : integer;
+  idx       : integer;
+  j         : integer;
+  totalCores: integer;
+begin
+  // Distribute load across cores as much as possible.
+  owsRoundRobin.Clear;
+
+  if owsClusters.Count = 1 then begin
+    owsRoundRobin.Add(pointer(0));
+    Exit;
   end;
 
-  // TODO : remove duplicates
-  // TODO : create round robin scheme
+  //n-dimensional Bresenham
+  totalCores := 0;
+  for i := 0 to owsClusters.Count - 1 do begin
+    Cluster[i].Error := 0;
+    Inc(totalCores, Cluster[i].ProcessorCount);
+  end;
+  for i := 1 to totalCores do begin
+    idx := FindHighestError;
+    owsRoundRobin.Add(pointer(idx));
+    Cluster[idx].Error := Cluster[idx].Error - totalCores;
+    for j := 0 to owsClusters.Count - 1 do
+      Cluster[j].Error := Cluster[j].Error + Cluster[j].ProcessorCount;
+  end;
+end; { TOTPWorkerScheduler.CreateRoundRobin }
+
+function TOTPWorkerScheduler.FindHighestError: integer;
+var
+  i: integer;
+begin
+  Result := 0;
+  for i := 1 to owsClusters.Count - 1 do
+    if Cluster[i].Error > Cluster[Result].Error then
+      Result := i;
+end; { TOTPWorkerScheduler.FindHighestError }
+
+function TOTPWorkerScheduler.GetCluster(idx: integer): TOTPGroupAffinity;
+begin
+  Result := TOTPGroupAffinity(owsClusters[idx]);
+end; { TOTPWorkerScheduler.GetCluster }
+
+function TOTPWorkerScheduler.IsSame(value1, value2: TOTPGroupAffinity): boolean;
+begin
+  Result := (value1.Group = value2.Group) and (value1.Affinity = value2.Affinity);
+end; { TOTPWorkerScheduler.IsSame }
+
+procedure TOTPWorkerScheduler.RemoveDuplicateClusters;
+var
+  i: integer;
+begin
+  for i := owsClusters.Count - 2 downto 0 do
+    if IsSame(Cluster[i], Cluster[i+1]) then
+      owsClusters.Delete(i+1);
+end; { TOTPWorkerScheduler.RemoveDuplicateClusters }
+
+procedure TOTPWorkerScheduler.Update(affinity, processorGroups, numaNodes:
+  IOmniIntegerSet);
+begin
+  owsClusters.Clear;
+  CreateInitialClusters(processorGroups, numaNodes);
+  ApplyAffinityMask(affinity);
+  owsClusters.Sort(CompareGroupAffinity);
+  RemoveDuplicateClusters;
+  CreateRoundRobin;
 end; { TOTPWorkerScheduler.Update }
 
 initialization
