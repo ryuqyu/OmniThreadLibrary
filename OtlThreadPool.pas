@@ -1790,6 +1790,11 @@ var
   nodeInfo    : IOmniNUMANode;
 {$ENDIF OTL_NUMASupport}
 begin
+  owsClusters.Add(TOTPGroupAffinity.Create(2, $03));
+  owsClusters.Add(TOTPGroupAffinity.Create(1, $3F));
+  owsClusters.Add(TOTPGroupAffinity.Create(0, $0F));
+  Exit;
+
   {$IFDEF OTL_NUMASupport}
   envGroups := Environment.ProcessorGroups;
   envNodes := Environment.NUMANodes;
@@ -1831,7 +1836,7 @@ begin
   //n-dimensional Bresenham
   totalCores := 0;
   for i := 0 to owsClusters.Count - 1 do begin
-    Cluster[i].Error := 0;
+    Cluster[i].Error := Cluster[i].ProcessorCount;
     Inc(totalCores, Cluster[i].ProcessorCount);
   end;
   for i := 1 to totalCores do begin
