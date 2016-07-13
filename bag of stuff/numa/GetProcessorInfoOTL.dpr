@@ -5,6 +5,7 @@ program GetProcessorInfoOTL;
 {$R *.res}
 
 uses
+  FastMM4,
   Winapi.Windows,
   System.SysUtils,
   System.Classes,
@@ -18,14 +19,14 @@ begin
     Writeln('Processor groups');
     for i := 0 to Environment.ProcessorGroups.Count - 1 do
       Writeln(Environment.ProcessorGroups[i].GroupNumber, ': Mask: ',
-        IntToHex(Environment.ProcessorGroups[i].Affinity, 16));
+        IntToHex(Environment.ProcessorGroups[i].Affinity.AsMask, 16));
     Writeln;
 
     Writeln('NUMA nodes');
     for i := 0 to Environment.NUMANodes.Count - 1 do
       Writeln(Environment.NUMANodes[i].NodeNumber, ': Group: ',
         Environment.NUMANodes[i].GroupNumber, ', Mask: ',
-        IntToHex(Environment.NUMANodes[i].Affinity, 16));
+        IntToHex(Environment.NUMANodes[i].Affinity.AsMask, 16));
 
     if DebugHook <> 0 then
       Readln;
