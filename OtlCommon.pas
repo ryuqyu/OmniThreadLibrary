@@ -35,10 +35,13 @@
 ///     Blog            : http://thedelphigeek.com
 ///   Contributors      : GJ, Lee_Nover, scarre, Sean B. Durkin
 ///   Creation date     : 2008-06-12
-///   Last modification : 2016-07-01
-///   Version           : 1.43
+///   Last modification : 2016-07-13
+///   Version           : 1.43a
 ///</para><para>
 ///   History:
+///     1.43a: 2016-07-13
+///       - TOmniIntegerSet only calls OnChange event when value is actually changed.
+///         (Was called on each assign.)
 ///     1.43: 2016-07-05
 ///       - Implemented IOmniIntegerSet.
 ///       - Implemented IOmniThreadEnvironment.GroupAffinity.
@@ -699,6 +702,7 @@ type
   //
     function  Add(value: integer): boolean;
     procedure Assign(const value: IOmniIntegerSet);
+    procedure Clear;
     function  Contains(value: integer): boolean;
     function  Count: integer;
     function  IsEmpty: boolean;
@@ -742,6 +746,7 @@ type
     function  Add(value: integer): boolean;
     procedure Assign(const value: IOmniIntegerSet); overload;
     procedure Assign(const value: TOmniIntegerSet); overload;
+    procedure Clear; inline;
     function  Contains(value: integer): boolean; inline;
     function  Count: integer;
     function  IsEmpty: boolean;
@@ -822,7 +827,8 @@ type
     FGroup   : integer;
     function GetAffinity: IOmniIntegerSet;
   public
-    constructor Create(groupNumber: integer; const affinityMask: IOmniIntegerSet);
+    constructor Create(groupNumber: integer; const affinity: IOmniIntegerSet); overload;
+    constructor Create(groupNumber: integer; const affinityMask: int64); overload;
     property Group: integer read FGroup write FGroup;
     property Affinity: IOmniIntegerSet read GetAffinity;
   end; { TOmniGroupAffinity }
@@ -4577,19 +4583,23 @@ begin
     FBits.Size := value + 1;
   Result := FBits[value];
   FBits[value] := true;
-  DoOnChange;
+  if not Result then
+    DoOnChange;
 end; { TOmniIntegerSet.Add }
 
 procedure TOmniIntegerSet.Assign(const value: IOmniIntegerSet);
 var
-  i      : integer;
-  valBits: TBits;
+  i       : integer;
+  oldValue: int64;
+  valBits : TBits;
 begin
+  oldValue := AsMask;
   valBits := value.AsBits;
   FBits.Size := valBits.Size;
   for i := 0 to FBits.Size - 1 do
     FBits[i] := valBits[i];
-  DoOnChange;
+  if oldValue <> AsMask then
+    DoOnChange;
 end; { TOmniIntegerSet.Assign }
 
 procedure TOmniIntegerSet.Assign(const value: TOmniIntegerSet);
@@ -4597,9 +4607,14 @@ begin
   Assign(value as IOmniIntegerSet);
 end; { TOmniIntegerSet.Assign }
 
+procedure TOmniIntegerSet.Clear;
+begin
+  AsMask := 0;
+end; { TOmniIntegerSet.Clear }
+
 function TOmniIntegerSet.Contains(value: integer): boolean;
 begin
-  Result := FBits[value];
+  Result := (value < FBits.Size) and FBits[value];
 end; { TOmniIntegerSet.Contains }
 
 function TOmniIntegerSet.Count: integer;
@@ -4706,15 +4721,18 @@ function TOmniIntegerSet.Remove(value: integer): boolean;
 begin
   Result := FBits[value];
   FBits[value] := false;
-  DoOnChange;
+  if Result then
+    DoOnChange;
 end; { TOmniIntegerSet.Remove }
 
 {$IFDEF OTL_Generics}
 procedure TOmniIntegerSet.SetAsArray(const value: TArray<integer>);
 var
-  max: integer;
-  val: integer;
+  max     : integer;
+  oldValue: int64;
+  val     : integer;
 begin
+  oldValue := AsMask;
   max := 0;
   for val in value do
     if val > max then
@@ -4724,15 +4742,18 @@ begin
     FBits[val] := false;
   for val in value do
     FBits[val] := true;
-  DoOnChange;
+  if oldValue <> AsMask then
+    DoOnChange;
 end; { TOmniIntegerSet.SetAsArray }
 {$ENDIF OTL_Generics}
 
 procedure TOmniIntegerSet.SetAsBits(const value: TBits);
 var
-  i: integer;
-  max: integer;
+  i       : integer;
+  max     : integer;
+  oldValue: int64;
 begin
+  oldValue := AsMask;
   max := 0;
   for i := 0 to value.Size - 1 do
     if value[i] then
@@ -4740,14 +4761,17 @@ begin
   FBits.Size := max+1;
   for i := 0 to FBits.Size - 1 do
     FBits[i] := value[i];
-  DoOnChange;
+  if oldValue <> AsMask then
+    DoOnChange;
 end; { TOmniIntegerSet.SetAsBits }
 
 procedure TOmniIntegerSet.SetAsIntArray(const value: TIntegerDynArray);
 var
-  max: integer;
-  val: integer;
+  max     : integer;
+  oldValue: int64;
+  val     : integer;
 begin
+  oldValue := AsMask;
   max := 0;
   for val in value do
     if val > max then
@@ -4757,16 +4781,19 @@ begin
     FBits[val] := false;
   for val in value do
     FBits[val] := true;
-  DoOnChange;
+  if oldValue <> AsMask then
+    DoOnChange;
 end; { TOmniIntegerSet.SetAsIntArray }
 
 procedure TOmniIntegerSet.SetAsMask(const value: int64);
 var
-  b  : boolean;
-  i  : integer;
-  max: integer;
-  val: int64;
+  b       : boolean;
+  i       : integer;
+  max     : integer;
+  oldValue: int64;
+  val     : int64;
 begin
+  oldValue := AsMask;
   FBits.Size := 64;
   val := value;
   max := 0;
@@ -4779,7 +4806,8 @@ begin
   end;
   if max <> 63 then
     FBits.Size := max + 1;
-  DoOnChange;
+  if oldValue <> value then
+    DoOnChange;
 end; { TOmniIntegerSet.SetAsMask }
 
 procedure TOmniIntegerSet.SetOnChange(const value: TOmniIntegerSetChangedEvent);
@@ -4789,11 +4817,16 @@ end; { TOmniIntegerSet.SetOnChange }
 
 { TOmniGroupAffinity }
 
-constructor TOmniGroupAffinity.Create(groupNumber: integer; const affinityMask:
-  IOmniIntegerSet);
+constructor TOmniGroupAffinity.Create(groupNumber: integer; const affinity: IOmniIntegerSet);
 begin
-  Group := groupNumber;
-  Affinity.Assign(affinityMask);
+  Create(groupNumber, affinity.AsMask);
+end; { TOmniGroupAffinity.Create }
+
+constructor TOmniGroupAffinity.Create(groupNumber: integer; const affinityMask: int64);
+begin
+  FGroup := groupNumber;
+  FAffinity := TOmniIntegerSet.Create;
+  FAffinity.AsMask := affinityMask;
 end; { TOmniGroupAffinity.Create }
 
 function TOmniGroupAffinity.GetAffinity: IOmniIntegerSet;
