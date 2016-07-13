@@ -2,7 +2,7 @@ object frmProcessorGroupsNUMA: TfrmProcessorGroupsNUMA
   Left = 0
   Top = 0
   Caption = 'Processor groups & NUMA tester'
-  ClientHeight = 336
+  ClientHeight = 279
   ClientWidth = 635
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -39,7 +39,7 @@ object frmProcessorGroupsNUMA: TfrmProcessorGroupsNUMA
     Left = 248
     Top = 0
     Width = 387
-    Height = 336
+    Height = 279
     Align = alRight
     Anchors = [akLeft, akTop, akRight, akBottom]
     ItemHeight = 13
@@ -85,7 +85,7 @@ object frmProcessorGroupsNUMA: TfrmProcessorGroupsNUMA
   end
   object btnScheduleTask: TButton
     Left = 8
-    Top = 96
+    Top = 102
     Width = 234
     Height = 25
     Caption = 'Schedule a task'
@@ -115,5 +115,23 @@ object frmProcessorGroupsNUMA: TfrmProcessorGroupsNUMA
     Height = 21
     TabOrder = 8
     TextHint = '0,1'
+  end
+  object btnScheduleAllGroups: TButton
+    Left = 8
+    Top = 216
+    Width = 234
+    Height = 25
+    Caption = 'Schedule task in all groups'
+    TabOrder = 9
+    OnClick = btnScheduleAllGroupsClick
+  end
+  object btnSchedulAllNodes: TButton
+    Left = 8
+    Top = 247
+    Width = 234
+    Height = 25
+    Caption = 'Schedule task in all NUMA nodes'
+    TabOrder = 10
+    OnClick = btnSchedulAllNodesClick
   end
 end

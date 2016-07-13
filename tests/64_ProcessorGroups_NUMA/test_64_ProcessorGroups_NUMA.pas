@@ -24,6 +24,10 @@ type
     lblAffinity       : TLabel;
     lbLog             : TListBox;
     lblProcessorGroups: TLabel;
+    btnScheduleAllGroups: TButton;
+    btnSchedulAllNodes: TButton;
+    procedure btnSchedulAllNodesClick(Sender: TObject);
+    procedure btnScheduleAllGroupsClick(Sender: TObject);
     procedure btnScheduleTaskClick(Sender: TObject);
     procedure btnStartInNumaNodeClick(Sender: TObject);
     procedure btnStartProcGroupClick(Sender: TObject);
@@ -31,7 +35,6 @@ type
   private
     procedure DisplayInfo;
     procedure Log(const msg: string); overload;
-    procedure Log(const msg: string; const params: array of const); overload;
     function  MapToIntegerArray(const s: string): TArray<integer>;
     procedure WMMsgLog(var msg: TOmniMessage); message MSG_LOG;
   public
@@ -61,6 +64,26 @@ begin
 end;
 
 { TfrmProcessorGroupsNUMA }
+
+procedure TfrmProcessorGroupsNUMA.btnSchedulAllNodesClick(Sender: TObject);
+begin
+  GlobalOmniThreadPool.ProcessorGroups.Clear;
+  GlobalOmniThreadPool.NUMANodes := Environment.NUMANodes.All;
+
+  CreateTask(TestWorker, 'Scheduled task')
+    .OnMessage(Self)
+    .Schedule;
+end;
+
+procedure TfrmProcessorGroupsNUMA.btnScheduleAllGroupsClick(Sender: TObject);
+begin
+  GlobalOmniThreadPool.ProcessorGroups := Environment.ProcessorGroups.All;
+  GlobalOmniThreadPool.NUMANodes.Clear;
+
+  CreateTask(TestWorker, 'Scheduled task')
+    .OnMessage(Self)
+    .Schedule;
+end;
 
 procedure TfrmProcessorGroupsNUMA.btnScheduleTaskClick(Sender: TObject);
 var
@@ -130,12 +153,7 @@ end;
 
 procedure TfrmProcessorGroupsNUMA.Log(const msg: string);
 begin
-  lbLog.Items.Add(msg);
-end;
-
-procedure TfrmProcessorGroupsNUMA.Log(const msg: string; const params: array of const);
-begin
-  Log(Format(msg, params));
+  lbLog.ItemIndex := lbLog.Items.Add(msg);
 end;
 
 function TfrmProcessorGroupsNUMA.MapToIntegerArray(const s: string): TArray<integer>;
