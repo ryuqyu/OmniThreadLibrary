@@ -35,10 +35,13 @@
 ///     Blog            : http://thedelphigeek.com
 ///   Contributors      : GJ, Lee_Nover, Sean B. Durkin
 ///   Creation date     : 2008-06-12
-///   Last modification : 2016-07-13
-///   Version           : 2.13
+///   Last modification : 2016-07-14
+///   Version           : 2.14
 /// </para><para>
 ///   History:
+///     2.14: 2016-07-14
+///       - Any change to Affinity, ProcessorGroups, or NUMANodes properties will reset
+///         the MaxExecuting count.
 ///     2.13: 2016-07-13
 ///       - Implemented NUMA and Processor group support.
 ///     2.12: 2015-10-04
@@ -349,13 +352,15 @@ type
 
   TOTPGroupAffinity = class
   private
-    FAffinity : int64;
+    FAffinity: int64;
     FError    : integer;
     FGroup    : integer;
     FProcCount: integer;
+  strict protected
+    procedure SetAffinity(const value: int64);
   public
     constructor Create(group: integer; affinity: int64);
-    property Affinity: int64 read FAffinity write FAffinity;
+    property Affinity: int64 read FAffinity write SetAffinity;
     property Group: integer read FGroup;
     property ProcessorCount: integer read FProcCount;
     property Error: integer read FError write FError;
@@ -377,7 +382,8 @@ type
   public
     constructor Create;
     destructor  Destroy; override;
-    function Next: TOmniGroupAffinity;
+    function  Count: integer; inline;
+    function  Next: TOmniGroupAffinity;
     procedure Update(affinity, processorGroups, numaNodes: IOmniIntegerSet);
     property Cluster[idx: integer]: TOTPGroupAffinity read GetCluster;
   end; { TOTPWorkerScheduler }
@@ -1001,7 +1007,6 @@ begin
   CountQueued.Value := 0;
   IdleWorkerThreadTimeout_sec.Value := CDefaultIdleWorkerThreadTimeout_sec;
   WaitOnTerminate_sec.Value := CDefaultWaitOnTerminate_sec;
-  MaxExecuting.Value := Environment.Process.Affinity.Count;
   Task.SetTimer(1, 1000, @TOTPWorker.MaintainanceTimer);
   UpdateScheduler;
   Result := true;
@@ -1439,6 +1444,7 @@ end; { TOTPWorker.StopThread }
 procedure TOTPWorker.UpdateScheduler;
 begin
   owScheduler.Update(owAffinity, owProcessorGroups, owNUMANodes);
+  MaxExecuting.Value := owScheduler.Count;
 end; { TOTPWorker.UpdateScheduler }
 
 { TOTPThreadDataFactoryData }
@@ -1732,16 +1738,21 @@ end; { TOmniThreadPool.WorkerObj }
 { TOTPGroupAffinity }
 
 constructor TOTPGroupAffinity.Create(group: integer; affinity: int64);
-var
-  affSet: IOmniIntegerSet;
 begin
   inherited Create;
   FGroup := group;
-  FAffinity := affinity;
+  Self.Affinity := affinity;
+end; { TOTPGroupAffinity.Create }
+
+procedure TOTPGroupAffinity.SetAffinity(const value: int64);
+var
+  affSet: IOmniIntegerSet;
+begin
+  FAffinity := value;
   affSet := TOmniIntegerSet.Create;
   affSet.AsMask := affinity;
   FProcCount := affSet.Count;
-end; { TOTPGroupAffinity.Create }
+end; { TOTPGroupAffinity.SetAffinity }
 
 { TOTPWorkerScheduler }
 
@@ -1778,6 +1789,11 @@ begin
       Cluster[i].Affinity := Cluster[i].Affinity AND affinityMask;
   end;
 end; { TOTPWorkerScheduler.ApplyAffinityMask }
+
+function TOTPWorkerScheduler.Count: integer;
+begin
+  Result := Length(owsRoundRobin);
+end; { TOTPWorkerScheduler.Count }
 
 procedure TOTPWorkerScheduler.CreateInitialClusters(const processorGroups, numaNodes:
   IOmniIntegerSet);
@@ -1824,12 +1840,6 @@ var
 begin
   // Distribute load across cores as much as possible.
   owsNextCluster := 0;
-
-  if owsClusters.Count = 1 then begin
-    SetLength(owsRoundRobin, 1);
-    owsRoundRobin[0] := 0;
-    Exit;
-  end;
 
   //n-dimensional Bresenham
   totalCores := 0;
