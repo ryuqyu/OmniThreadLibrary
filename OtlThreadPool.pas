@@ -42,6 +42,7 @@
 ///     2.14: 2016-07-14
 ///       - Any change to Affinity, ProcessorGroups, or NUMANodes properties will reset
 ///         the MaxExecuting count.
+///       - Changes to Affinity, ProcessorGroups, and NUMANodes properties are synchronous.
 ///     2.13: 2016-07-13
 ///       - Implemented NUMA and Processor group support.
 ///     2.12: 2015-10-04
@@ -488,7 +489,6 @@ type
     function  GetName: string;
     function  GetUniqueID: int64;
     function  GetWaitOnTerminate_sec: integer;
-    function  MakeIntegerSetCopy(const value: IOmniIntegerSet): TOmniValue;
     procedure NotifyAffinityChanged(const value: IOmniIntegerSet);
     procedure SetIdleWorkerThreadTimeout_sec(value: integer);
     procedure SetMaxExecuting(value: integer);
@@ -1334,8 +1334,7 @@ end; { TOTPWorker.Schedule }
 
 procedure TOTPWorker.ScheduleNext(workItem: TOTPWorkItem);
 var
-  groupAffinity: TOTPGroupAffinity;
-  worker       : TOTPWorkerThread;
+  worker: TOTPWorkerThread;
 begin
   worker := nil;
   if (MaxExecuting = -1) or (owRunningWorkers.Count < MaxExecuting.Value) then begin
@@ -1377,8 +1376,9 @@ end; { TOTPWorker.ScheduleNext }
 
 procedure TOTPWorker.SetAffinity(const value: TOmniValue);
 begin
-  owAffinity.Assign(value.AsInterface as IOmniIntegerSet);
+  owAffinity.Assign(value[0].AsInterface as IOmniIntegerSet);
   UpdateScheduler;
+  (value[1].AsObject as TOmniWaitableValue).Signal;
 end; { TOTPWorker.SetAffinity }
 
 procedure TOTPWorker.SetMonitor(const params: TOmniValue);
@@ -1409,14 +1409,16 @@ end; { TOTPWorker.SetName }
 
 procedure TOTPWorker.SetNUMANodes(const value: TOmniValue);
 begin
-  owNUMANodes.Assign(value.AsInterface as IOmniIntegerSet);
+  owNUMANodes.Assign(value[0].AsInterface as IOmniIntegerSet);
   UpdateScheduler;
+  (value[1].AsObject as TOmniWaitableValue).Signal;
 end; { TOTPWorker.SetNUMANodes }
 
 procedure TOTPWorker.SetProcessorGroups(const value: TOmniValue);
 begin
-  owProcessorGroups.Assign(value.AsInterface as IOmniIntegerSet);
+  owProcessorGroups.Assign(value[0].AsInterface as IOmniIntegerSet);
   UpdateScheduler;
+  (value[1].AsObject as TOmniWaitableValue).Signal;
 end; { TOTPWorker.SetProcessorGroups }
 
 procedure TOTPWorker.SetThreadDataFactory(const threadDataFactory: TOmniValue);
@@ -1606,17 +1608,7 @@ begin
   {$ENDIF LogThreadPool}
 end; { TGpThreadPool.Log }
 
-function TOmniThreadPool.MakeIntegerSetCopy(const value: IOmniIntegerSet): TOmniValue;
-var
-  copy: IOmniIntegerSet;
-begin
-  copy := TOmniIntegerSet.Create;
-  copy.Assign(value);
-  Result.AsInterface := copy;
-end; { TOmniThreadPool.MakeIntegerSetCopy }
-
-function TOmniThreadPool.MonitorWith(const monitor: IOmniThreadPoolMonitor):
-  IOmniThreadPool;
+function TOmniThreadPool.MonitorWith(const monitor: IOmniThreadPoolMonitor): IOmniThreadPool;
 begin
   {$IFDEF MSWINDOWS}
   monitor.Monitor(Self);
@@ -1625,19 +1617,49 @@ begin
 end; { TOmniThreadPool.MonitorWith }
 
 procedure TOmniThreadPool.NotifyAffinityChanged(const value: IOmniIntegerSet);
+var
+  copySet: IOmniIntegerSet;
+  params : TOmniValue;
+  res    : TOmniWaitableValue;
 begin
-  otpWorkerTask.Invoke(@TOTPWorker.SetAffinity, MakeIntegerSetCopy(value));
+  res := TOmniWaitableValue.Create;
+  try
+    copySet := TOmniIntegerSet.Create;
+    copySet.Assign(value);
+    otpWorkerTask.Invoke(@TOTPWorker.SetAffinity, [copySet, res]);
+    res.WaitFor(INFINITE);
+  finally FreeAndNil(res); end;
 end; { TOmniThreadPool.NotifyAffinityChanged }
 
 {$IFDEF OTL_NUMASupport}
 procedure TOmniThreadPool.NotifyNUMANodesChanged(const value: IOmniIntegerSet);
+var
+  copySet: IOmniIntegerSet;
+  params : TOmniValue;
+  res    : TOmniWaitableValue;
 begin
-  otpWorkerTask.Invoke(@TOTPWorker.SetNUMANodes, MakeIntegerSetCopy(value));
+  res := TOmniWaitableValue.Create;
+  try
+    copySet := TOmniIntegerSet.Create;
+    copySet.Assign(value);
+    otpWorkerTask.Invoke(@TOTPWorker.SetNUMANodes, [copySet, res]);
+    res.WaitFor(INFINITE);
+  finally FreeAndNil(res); end;
 end; { TOmniThreadPool.NotifyNUMANodesChanged }
 
 procedure TOmniThreadPool.NotifyProcessorGroupsChanged(const value: IOmniIntegerSet);
+var
+  copySet: IOmniIntegerSet;
+  params : TOmniValue;
+  res    : TOmniWaitableValue;
 begin
-  otpWorkerTask.Invoke(@TOTPWorker.SetProcessorGroups, MakeIntegerSetCopy(value));
+  res := TOmniWaitableValue.Create;
+  try
+    copySet := TOmniIntegerSet.Create;
+    copySet.Assign(value);
+    otpWorkerTask.Invoke(@TOTPWorker.SetProcessorGroups, [copySet, res]);
+    res.WaitFor(INFINITE);
+  finally FreeAndNil(res); end;
 end; { TOmniThreadPool.NotifyProcessorGroupsChanged }
 {$ENDIF OTL_NUMASupport}
 

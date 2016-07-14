@@ -35,6 +35,7 @@ type
   private
     procedure DisplayInfo;
     procedure Log(const msg: string); overload;
+    procedure Log(const msg: string; const params: array of const); overload;
     function  MapToIntegerArray(const s: string): TArray<integer>;
     procedure WMMsgLog(var msg: TOmniMessage); message MSG_LOG;
   public
@@ -70,6 +71,8 @@ begin
   GlobalOmniThreadPool.ProcessorGroups.Clear;
   GlobalOmniThreadPool.NUMANodes := Environment.NUMANodes.All;
 
+  Log('Max executing: %d', [GlobalOmniThreadPool.MaxExecuting]);
+
   CreateTask(TestWorker, 'Scheduled task')
     .OnMessage(Self)
     .Schedule;
@@ -79,6 +82,8 @@ procedure TfrmProcessorGroupsNUMA.btnScheduleAllGroupsClick(Sender: TObject);
 begin
   GlobalOmniThreadPool.ProcessorGroups := Environment.ProcessorGroups.All;
   GlobalOmniThreadPool.NUMANodes.Clear;
+
+  Log('Max executing: %d', [GlobalOmniThreadPool.MaxExecuting]);
 
   CreateTask(TestWorker, 'Scheduled task')
     .OnMessage(Self)
@@ -102,6 +107,8 @@ begin
 
   if inpNUMANodes.Text <> '' then
     GlobalOmniThreadPool.NUMANodes.AsArray := MapToIntegerArray(inpNUMANodes.Text);
+
+  Log('Max executing: %d', [GlobalOmniThreadPool.MaxExecuting]);
 
   CreateTask(TestWorker, 'Scheduled task')
     .OnMessage(Self)
@@ -154,6 +161,11 @@ end;
 procedure TfrmProcessorGroupsNUMA.Log(const msg: string);
 begin
   lbLog.ItemIndex := lbLog.Items.Add(msg);
+end;
+
+procedure TfrmProcessorGroupsNUMA.Log(const msg: string; const params: array of const);
+begin
+  Log(Format(msg, params));
 end;
 
 function TfrmProcessorGroupsNUMA.MapToIntegerArray(const s: string): TArray<integer>;
