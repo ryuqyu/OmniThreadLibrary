@@ -1619,7 +1619,6 @@ end; { TOmniThreadPool.MonitorWith }
 procedure TOmniThreadPool.NotifyAffinityChanged(const value: IOmniIntegerSet);
 var
   copySet: IOmniIntegerSet;
-  params : TOmniValue;
   res    : TOmniWaitableValue;
 begin
   res := TOmniWaitableValue.Create;
@@ -1635,7 +1634,6 @@ end; { TOmniThreadPool.NotifyAffinityChanged }
 procedure TOmniThreadPool.NotifyNUMANodesChanged(const value: IOmniIntegerSet);
 var
   copySet: IOmniIntegerSet;
-  params : TOmniValue;
   res    : TOmniWaitableValue;
 begin
   res := TOmniWaitableValue.Create;
@@ -1650,7 +1648,6 @@ end; { TOmniThreadPool.NotifyNUMANodesChanged }
 procedure TOmniThreadPool.NotifyProcessorGroupsChanged(const value: IOmniIntegerSet);
 var
   copySet: IOmniIntegerSet;
-  params : TOmniValue;
   res    : TOmniWaitableValue;
 begin
   res := TOmniWaitableValue.Create;
