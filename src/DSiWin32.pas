@@ -8,10 +8,13 @@
                        Christian Wimmer, Tommi Prami, Miha, Craig Peterson, Tommaso Ercole,
                        bero.
    Creation date     : 2002-10-09
-   Last modification : 2016-07-01
-   Version           : 1.89
+   Last modification : 2016-07-18
+   Version           : 1.90
 </pre>*)(*
    History:
+     1.90: 2016-07-18
+       - Implemented dynamically loaded forwarders DSiGetSystemFirmwareTable,
+         DSiGetNumaProximityNodeEx, and DSiGetNumaHighestNodeNumber.
      1.89: 2016-07-01
        - Implemented dynamically loaded forwarders DSiGetThreadGroupAffinity and
          DSiSetThreadGroupAffinity.
@@ -1934,6 +1937,8 @@ type
     nSize: DWORD): DWORD; stdcall;
   function  DSiGetProcessMemoryInfo(process: THandle; memCounters: PProcessMemoryCounters;
     cb: DWORD): boolean; stdcall;
+  function  DSiGetSystemFirmwareTable(FirmwareTableProviderSignature: DWORD;
+    FirmwareTableID: DWORD; pFirmwareTableBuffer: pointer; BufferSize: DWORD): UInt; stdcall;
   function  DSiGetThreadGroupAffinity(hThread: THandle; var GroupAffinity: TGroupAffinity): BOOL; stdcall;
   function  DSiGetTickCount64: int64; stdcall;
   function  DSiGetUserProfileDirectoryW(hToken: THandle; lpProfileDir: PWideChar;
@@ -1952,6 +1957,9 @@ type
   function  DSiNetApiBufferFree(buffer: pointer): cardinal; stdcall;
   function  DSiNetWkstaGetInfo(servername: PChar; level: cardinal;
     out bufptr: pointer): cardinal; stdcall;
+  function  DSiGetNumaHighestNodeNumber(var HighestNodeNunber: ULONG): BOOL; stdcall;
+  function  DSiGetNumaProximityNodeEx(ProximityId: ULONG;
+    var NodeNumber: USHORT): BOOL; stdcall;
   function  DSiNTNetShareAdd(serverName: PChar; level: integer; buf: PChar;
     var parm_err: integer): DWord; stdcall;
   function  DSiNTNetShareDel(serverName: PChar; netName: PWideChar;
@@ -2091,6 +2099,8 @@ type
     nSize: DWORD): DWORD; stdcall;
   TGetProcessMemoryInfo = function(process: THandle; memCounters: PProcessMemoryCounters;
     cb: DWORD): boolean; stdcall;
+  TGetSystemFirmwareTable = function (FirmwareTableProviderSignature: DWORD;
+    FirmwareTableID: DWORD; pFirmwareTableBuffer: pointer; BufferSize: DWORD): UInt; stdcall;
   TGetThreadGroupAffinity = function(hThread: THandle; var GroupAffinity: TGroupAffinity): BOOL; stdcall;
   TGetTickCount64 = function: int64; stdcall;
   TGetUserProfileDirectoryW = function(hToken: THandle; lpProfileDir: PWideChar;
@@ -2109,6 +2119,9 @@ type
   TNetApiBufferFree = function(buffer: pointer): cardinal; stdcall;
   TNetWkstaGetInfo = function(servername: PChar; level: cardinal;
     out bufptr: pointer): cardinal; stdcall;
+  TGetNumaHighestNodeNumber = function(var HighestNodeNunber: ULONG): BOOL; stdcall;
+  TGetNumaProximityNodeEx = function (ProximityId: ULONG;
+    var NodeNumber: USHORT): BOOL; stdcall;
   TNTNetShareAdd = function(serverName: PChar; level: integer; buf: PChar;
     var parm_err: integer): DWord; stdcall;
   TNTNetShareDel = function(serverName: PChar; netName: PWideChar;
@@ -2147,6 +2160,7 @@ const
   GGetLongPathName: TGetLongPathName = nil;
   GGetProcessImageFileName: TGetProcessImageFileName = nil;
   GGetProcessMemoryInfo: TGetProcessMemoryInfo = nil;
+  GGetSystemFirmwareTable: TGetSystemFirmwareTable = nil;
   GGetThreadGroupAffinity: TGetThreadGroupAffinity = nil;
   GGetTickCount64: TGetTickCount64 = nil;
   GGetUserProfileDirectoryW: TGetUserProfileDirectoryW = nil;
@@ -2159,6 +2173,8 @@ const
   GLogonUser: TLogonUser = nil;
   GNetApiBufferFree: TNetApiBufferFree = nil;
   GNetWkstaGetInfo: TNetWkstaGetInfo = nil;
+  GGetNumaHighestNodeNumber: TGetNumaHighestNodeNumber = nil;
+  GGetNumaProximityNodeEx: TGetNumaProximityNodeEx = nil;
   GNTNetShareAdd: TNTNetShareAdd = nil;
   GNTNetShareDel: TNTNetShareDel = nil;
   GOpenSCManager: TOpenSCManager = nil;
@@ -8657,9 +8673,23 @@ var
       GGetThreadGroupAffinity := DSiGetProcAddress('kernel32.dll', 'GetThreadGroupAffinity');
     if assigned(GGetThreadGroupAffinity) then
       Result := GGetThreadGroupAffinity(hThread, GroupAffinity)
-    else
+    else begin
+      SetLastError(ERROR_NOT_SUPPORTED);
       Result := false;
-  end; { DSiSetThreadGroupAffinity }
+    end;
+  end; { DSiGetThreadGroupAffinity }
+
+  function DSiGetSystemFirmwareTable(FirmwareTableProviderSignature: DWORD;
+    FirmwareTableID: DWORD; pFirmwareTableBuffer: pointer; BufferSize: DWORD): UInt;
+  begin
+    if not assigned(GGetSystemFirmwareTable) then
+      GGetSystemFirmwareTable := DSiGetProcAddress('kernel32.dll', 'GetSystemFirmwareTable');
+    if assigned(GGetSystemFirmwareTable) then
+      Result := GGetSystemFirmwareTable(FirmwareTableProviderSignature, FirmwareTableID,
+        pFirmwareTableBuffer, BufferSize)
+    else
+      Result := ERROR_NOT_SUPPORTED;
+  end; { DSiGetSystemFirmwareTable }
 
   function DSiGetTickCount64: int64; stdcall;
   begin
@@ -8803,6 +8833,30 @@ var
     else
       Result := ERROR_NOT_SUPPORTED;
   end; { DSiNetWkstaGetInfo }
+
+  function DSiGetNumaHighestNodeNumber(var HighestNodeNunber: ULONG): BOOL;
+  begin
+    if not assigned(GGetNumaHighestNodeNumber) then
+      GGetNumaHighestNodeNumber := DSiGetProcAddress('kernel32.dll', 'GetNumaHighestNodeNumber');
+    if assigned(GGetNumaHighestNodeNumber) then
+      Result := GGetNumaHighestNodeNumber(HighestNodeNunber)
+    else begin
+      SetLastError(ERROR_NOT_SUPPORTED);
+      Result := false;
+    end;
+  end; { DSiGetNumaHighestNodeNumber }
+
+  function DSiGetNumaProximityNodeEx(ProximityId: ULONG; var NodeNumber: USHORT): BOOL; stdcall;
+  begin
+    if not assigned(GGetNumaProximityNodeEx) then
+      GGetNumaProximityNodeEx := DSiGetProcAddress('kernel32.dll', 'GetNumaProximityNodeEx');
+    if assigned(GGetNumaProximityNodeEx) then
+      Result := GGetNumaProximityNodeEx(ProximityId, NodeNumber)
+    else begin
+      SetLastError(ERROR_NOT_SUPPORTED);
+      Result := false;
+    end;
+  end; { DSiGetNumaProximityNodeEx }
 
   function DSiNTNetShareAdd(serverName: PChar; level: integer; buf: PChar;
     var parm_err: integer): DWord;
