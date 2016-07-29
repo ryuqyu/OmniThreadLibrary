@@ -35,10 +35,14 @@
 ///     Blog            : http://thedelphigeek.com
 ///   Contributors      : GJ, Lee_Nover, scarre, Sean B. Durkin
 ///   Creation date     : 2008-06-12
-///   Last modification : 2016-07-13
-///   Version           : 1.43a
+///   Last modification : 2016-07-29
+///   Version           : 1.43b
 ///</para><para>
 ///   History:
+///     1.43b: 2016-07-29
+///       - [HHasenack] TOmniValue.IsInterfacedType was returning wrong result for the
+///         'owned object' data type. This could cause objects assigned to .AsOwnedObject
+///         to hang in memory and never be destroyed.
 ///     1.43a: 2016-07-13
 ///       - TOmniIntegerSet only calls OnChange event when value is actually changed.
 ///         (Was called on each assign.)
@@ -287,6 +291,7 @@ type
   TOmniValueContainer = class;
   IOmniAutoDestroyObject = interface;
 
+  //Update IsInterfacedType function when changing this enum!
   TOmniValueDataType = (ovtNull,
            {ovData} ovtBoolean, ovtInteger, ovtDouble, ovtObject, ovtPointer, ovtDateTime, ovtException,
            {ovIntf} ovtExtended, ovtString, ovtInterface, ovtVariant, ovtArray, ovtRecord, ovtOwnedObject
@@ -2790,7 +2795,7 @@ end; { TOmniValue.IsInterface }
 
 function TOmniValue.IsInterfacedType: boolean;
 begin
-  Result := ovType in [ovtInterface, ovtExtended, ovtString, ovtVariant, ovtArray, ovtRecord
+  Result := ovType in [ovtInterface, ovtExtended, ovtString, ovtVariant, ovtArray, ovtRecord, ovtOwnedObject
                        {$IFDEF MSWINDOWS}, ovtWideString, ovtAnsiString {$ENDIF}];
 end; { TOmniValue.IsInterfacedType }
 

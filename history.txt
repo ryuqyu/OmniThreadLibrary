@@ -7,12 +7,14 @@
   - [Win64 only] Implemented Environment.ProcessorGroups and 
     Environment.NUMANode to provide information about processors in a 
     massively parallel systems.
+  - [HHasenack] Added more unit tests.
 - Bug fixes:
   - Fixed unsafe 64-bit pointer-to-integer casts in TOmniCS.Initialize and 
     Atomic<T>.Initialize.
   - Fixed processing of 'new message'/'new wake event' events in TWaitFor.
   - IOmniAffinity.Mask changed from DWORD to NativeUInt to correctly support
     up to 64 processors on 64-bit systems.
+  - [HHasenack] Fixed memory leak in handling 'owned objects' in TOmniValue.
 
 3.05: 2015-09-07
 - New features:
